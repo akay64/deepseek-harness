@@ -88,9 +88,22 @@ function exchange(
 
 afterEach(() => {
   vi.useRealTimers()
+  vi.unstubAllEnvs()
 })
 
 describe('BrowserAuth', () => {
+  it('bypasses browser authentication only when explicitly disabled', async () => {
+    vi.stubEnv('DSH_WEB_NO_AUTH', '1')
+    const auth = await createAuth(new RecordCredentials())
+    const baseUrl = 'http://127.0.0.1:3082/nested?existing=value#fragment'
+    const res = response()
+
+    expect(auth.authenticatedUrl(baseUrl)).toBe(baseUrl)
+    expect(auth.authorizeIndex(request('/index.html', '127.0.0.1:3082'), res.value)).toBe(true)
+    expect(res.state).toEqual({})
+    expect(auth.isAuthenticated({ headers: {} })).toBe(true)
+  })
+
   it('mints one process token and a persistent authority-bound cookie', async () => {
     const store = new RecordCredentials()
     const processOwner = {}
