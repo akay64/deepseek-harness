@@ -38,18 +38,13 @@ describe('web e2e: startup auto-selection', () => {
     await scaffold?.close()
   })
 
-  it('keeps the resident Hero and composer nodes when the first Workspace session appears', async () => {
+  it('keeps the resident hero composer nodes when the first Workspace session appears', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-first-workspace-stable-tree'))
     await page.locator(`${ROOT_PHASE}[data-phase="hero"]`).waitFor({ timeout: 15_000 })
-    const headline = page.getByText('Into the Unknown', { exact: true })
-    // The headline text sits in its own span inside the title group; the fish
-    // hitbox precedes the group, not the text span.
-    const fishHitbox = headline.locator('xpath=../preceding-sibling::span[1]')
-    const fish = fishHitbox.locator('svg')
-    expect(await fish.evaluate(node => getComputedStyle(node).color))
-      .toBe(await headline.evaluate(node => getComputedStyle(node).color))
-    await fishHitbox.hover()
-    expect(await fish.evaluate(node => getComputedStyle(node).animationName)).not.toBe('none')
+    // This personal build omits the optional headline/brand chrome while
+    // retaining the hero phase and its functional composer controls.
+    expect(await page.getByText('Into the Unknown', { exact: true }).count()).toBe(0)
+    expect(await page.getByText('Preview', { exact: true }).count()).toBe(0)
     await page.evaluate(() => {
       const refs = {
         root: document.querySelector('div[data-phase="hero"]'),
@@ -123,12 +118,12 @@ describe('web e2e: startup auto-selection', () => {
       await page.reload({ waitUntil: 'commit' })
       await openingInFlight
 
-      // The frame a user sees while the session is still opening: hero phase, the
-      // hero title, and a composer that is actually painted (`settling` hides the
+      // The frame a user sees while the session is still opening: hero phase and
+      // a composer that is actually painted (`settling` hides the
       // seat with `visibility:hidden`, which Playwright reports as not visible).
       await page.waitForSelector(ROOT_PHASE, { timeout: 15_000 })
       expect(await page.locator(ROOT_PHASE).first().getAttribute('data-phase')).toBe('hero')
-      expect(await page.getByText('Into the Unknown').isVisible()).toBe(true)
+      expect(await page.getByText('Into the Unknown').count()).toBe(0)
       expect(await page.locator('[data-composer-input]').first().isVisible()).toBe(true)
 
       releaseOpening()
