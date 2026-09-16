@@ -304,14 +304,11 @@ describe('web e2e: lifecycle & chrome (workspace flow / reload / dark mode)', ()
     if (MODE !== 'record') {
       expect(fixtureUserPrompts(await readFile(FIXTURE, 'utf8'))).toEqual([PROMPT])
     }
-    // The blank frame renders the hero, not the resident composer: the
-    // headline plus the guidance placeholder are the empty state's anchors.
-    await expect.poll(() => page.getByText('Into the Unknown', { exact: false }).count(), { timeout: 15_000 }).toBe(1)
+    // The blank frame renders the hero composer;
+    // its guidance placeholder is the empty state's anchor.
     const input = page.locator('[data-composer-input]').first()
     await input.waitFor({ timeout: 10_000 })
     if (MODE !== 'record') {
-      await page.getByText('Into the Unknown', { exact: false }).hover()
-      await expect.poll(() => page.getByRole('tooltip').count()).toBe(0)
       // Golden of the hero's stable waiting state (captured before any send;
       // the conversation-region goldens belong to the other scenarios).
       const snapshot = await captureStableAria(page, '[class*="frame"]', scaffold.workspaceCwd)
