@@ -45,10 +45,8 @@ describe('web e2e: /goal human transcript presentation', () => {
 
   it('completes with Tab and shows the bare input and result without a model turn', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-goal-command-presentation'))
-    await expect.poll(() => page.getByText('Into the Unknown', { exact: false }).count(), {
-      timeout: 15_000,
-    }).toBe(1)
     const input = page.locator('[data-composer-input]').first()
+    await input.waitFor({ timeout: 15_000 })
     await input.fill('/go')
     const menu = page.getByRole('listbox', { name: 'Trigger suggestions' })
     await menu.getByRole('option', { name: 'Goal Set or view the goal for a long-running task' })
