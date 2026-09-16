@@ -15,7 +15,6 @@
 - button "Account menu": More
 - banner:
   - button "Open right sidebar"
-- text: Into the Unknown Preview
 - button "Choose workspace": workspace
 - button "Standard mode"
 - textbox "Describe what you want to build, / commands, @ files or sessions"
