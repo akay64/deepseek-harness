@@ -391,11 +391,11 @@ describe('compact configuration and defaults', () => {
       model: 'shared-id',
     })
 
-    expect(resolveCompactSpec(small, 1_000, 0)).toMatchObject({
-      thresholdTokens: 400,
+    expect(resolveCompactSpec(small, 1_000)).toMatchObject({
+      thresholdTokens: 500,
       retainTokens: 120,
     })
-    expect(resolveCompactSpec(otherProvider, 2_000, 0)).toMatchObject({
+    expect(resolveCompactSpec(otherProvider, 2_000)).toMatchObject({
       thresholdTokens: 1_600,
       retainTokens: 200,
     })
@@ -416,7 +416,7 @@ describe('compact configuration and defaults', () => {
         maxOverflowRetries: 3,
       }],
     }), { provider: 'ratio-provider', model: 'ratio-model' })
-    expect(resolveCompactSpec(ratioOverride, 2_000, 0)).toMatchObject({
+    expect(resolveCompactSpec(ratioOverride, 2_000)).toMatchObject({
       thresholdTokens: 1_200,
       retainTokens: 400,
       summarizationProvider: 'summary-provider',
@@ -428,44 +428,30 @@ describe('compact configuration and defaults', () => {
   })
 
   it.each([
-    [1_048_576, 256_000, 727_040, 126_812],
-    [1_000_000, 0, 800_000, 160_000],
-    [1_000_000, 100_000, 800_000, 144_000],
-    [1_000_000, 134_464, 800_000, 138_485],
-    [1_000_000, 256_000, 678_464, 119_040],
-  ])('reserves 64K headroom in window %i with output cap %i', (window, output, threshold, retained) => {
+    [1_048_576, 838_860, 167_772],
+    [1_000_000, 800_000, 160_000],
+    [272_000, 217_600, 43_520],
+  ])('scales pressure and ratio retention against the entire window %i', (window, threshold, retained) => {
     const policy = resolveTargetPolicy(resolveConfig({}), { provider: MODEL, model: MODEL })
 
-    expect(resolveCompactSpec(policy, window, output)).toMatchObject({
+    expect(resolveCompactSpec(policy, window)).toMatchObject({
       contextWindow: window,
       thresholdTokens: threshold,
       retainTokens: retained,
     })
   })
 
-  it.each([500, 501])('rejects headroom %i that exhausts the remaining capacity', (headroomTokens) => {
-    const policy = resolveTargetPolicy(resolveConfig({ headroomTokens }), { provider: MODEL, model: MODEL })
-    expect(() => resolveCompactSpec(policy, 1_000, 500))
-      .toThrow(/headroom tokens.*leaving no pressure budget/)
-  })
-
-  it('rejects ratio retention that reaches the headroom-limited threshold', () => {
-    const policy = resolveTargetPolicy(resolveConfig({ headroomTokens: 420 }), { provider: MODEL, model: MODEL })
-    expect(() => resolveCompactSpec(policy, 1_000, 500))
-      .toThrow(/retainTokens \(80\) must be less than threshold tokens 80/)
-  })
-
-  it('rejects a reserve that leaves no message budget or is not a count', () => {
-    const policy = resolveTargetPolicy(resolveConfig({}), { provider: MODEL, model: MODEL })
-
-    expect(() => resolveCompactSpec(policy, 1_000, 1_000))
-      .toThrow(/reserves 1000 completion tokens.*leaving no message budget/)
-    expect(() => resolveCompactSpec(policy, 1_000, 1_500))
-      .toThrow(/leaving no message budget/)
-    expect(() => resolveCompactSpec(policy, 1_000, -1))
-      .toThrow(/reservedCompletionTokens \(-1\) must be a non-negative integer/)
-    expect(() => resolveCompactSpec(policy, 1_000, 1.5))
-      .toThrow(/reservedCompletionTokens \(1.5\) must be a non-negative integer/)
+  it('retains the configured 95% threshold regardless of output cap or headroom', () => {
+    const policy = resolveTargetPolicy(resolveConfig({
+      thresholdRatio: 0.95,
+      retainTokens: 16_000,
+      headroomTokens: 65_536,
+      maxTokens: 24_000,
+    }), { provider: MODEL, model: MODEL })
+    expect(resolveCompactSpec(policy, 272_000)).toMatchObject({
+      thresholdTokens: 258_400,
+      retainTokens: 16_000,
+    })
   })
 
   it('inherits, clears, and replaces the summarization target as a pair', () => {
@@ -568,9 +554,9 @@ describe('compact configuration and defaults', () => {
       thresholdRatio: 0.5,
       retainTokens: 500,
     }), { provider: MODEL, model: MODEL })
-    expect(() => resolveCompactSpec(invalidPressure, 1_000, 0)).toThrow(/less than threshold/)
-    expect(() => resolveCompactSpec(invalidPressure, 1.5, 0)).toThrow(/positive integer/)
-    expect(() => resolveCompactSpec(invalidPressure, 0, 0)).toThrow(/positive integer/)
+    expect(() => resolveCompactSpec(invalidPressure, 1_000)).toThrow(/less than threshold/)
+    expect(() => resolveCompactSpec(invalidPressure, 1.5)).toThrow(/positive integer/)
+    expect(() => resolveCompactSpec(invalidPressure, 0)).toThrow(/positive integer/)
   })
 
 })
@@ -642,27 +628,25 @@ describe('pressure measurement and retention', () => {
     await expect(compactIfNeeded(compact, session)).resolves.not.toBeNull()
   })
 
-  it('gates pressure on the reserve the routed envelope records', async () => {
+  it('keeps full-window pressure when the routed envelope records an output reserve', async () => {
     const ctx = createContext(1_000)
     const compact = service({ auto: false, thresholdRatio: 0.8, retainRatio: 0.1 }, ctx)
     const session = conversation(4)
     const measured = ctx.tokenMeter.measure(session).totalTokens
 
-    // Premise: the measured pressure stays below 80% of the whole window, so the
-    // gate the reserve-free deployment uses stays closed.
     expect(measured).toBeLessThan(800)
     await expect(compactIfNeeded(compact, session)).resolves.toBeNull()
 
-    // The output reservation lowers the threshold below the measured history.
+    // Even a reservation exceeding the remaining capacity cannot lower the trigger.
     const maxTokens = 1_000 - measured + 1
     session.append('request/header', {
       header: { config: { provider: MODEL, model: MODEL, maxTokens } },
       reason: 'change',
     })
-    await expect(compactIfNeeded(compact, session)).resolves.not.toBeNull()
+    await expect(compactIfNeeded(compact, session)).resolves.toBeNull()
   })
 
-  it('falls back to the adapter request cap when the envelope records no reserve', async () => {
+  it('ignores the adapter request cap when the envelope records no reserve', async () => {
     const ctx = createContext(1_000)
     const compact = service({ auto: false, thresholdRatio: 0.8, retainRatio: 0.1 }, ctx)
     const session = conversation(4)
@@ -677,7 +661,7 @@ describe('pressure measurement and retention', () => {
       defaultMaxTokens: 1_000 - measured + 1,
     }))
 
-    await expect(compactIfNeeded(compact, session)).resolves.not.toBeNull()
+    await expect(compactIfNeeded(compact, session)).resolves.toBeNull()
   })
 
   it('requires capacity only for proactive pressure, not provider-confirmed overflow', async () => {
@@ -1798,7 +1782,7 @@ describe('automatic listener and loader composition', () => {
     ])
   })
 
-  it.each([1_000, 1_500])('warns once and continues when the output reserve is %i for a 1,000-token window', async (maxTokens) => {
+  it.each([1_000, 1_500])('ignores output reserve %i when checking pressure for a 1,000-token window', async (maxTokens) => {
     const ctx = createContext(1_000)
     const warnings: string[] = []
     ctx.logger.warn = ((message: string) => void warnings.push(message)) as typeof ctx.logger.warn
@@ -1810,16 +1794,14 @@ describe('automatic listener and loader composition', () => {
       defaultMaxTokens: maxTokens,
     })
     const compact = new TestCompactionEngine(ctx, {})
-    const session = conversation(4)
+    const session = conversation(1)
     const before = session.snapshotEvents()
+    expect(ctx.tokenMeter.measure(session).totalTokens).toBeLessThan(800)
 
     await expect(preStep(ctx, agent(session, MODEL))).resolves.toEqual({ kind: 'enter', messages: [] })
     await expect(preStep(ctx, agent(session, MODEL))).resolves.toEqual({ kind: 'enter', messages: [] })
 
-    expect(warnings).toEqual([
-      expect.stringContaining(`reserves ${maxTokens} completion tokens`),
-    ])
-    expect(warnings[0]).toContain('configure the adapter model\'s contextWindow above the effective request maxTokens')
+    expect(warnings).toEqual([])
     expect(session.snapshotEvents()).toEqual(before)
     expect(compact.calls).toHaveLength(0)
   })
