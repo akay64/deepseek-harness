@@ -141,19 +141,16 @@ export function resolveTargetPolicy(
 /**
  * Scale one routed policy into concrete token budgets for its model capacity.
  *
- * Pressure is capped by both the window fraction and the capacity remaining
- * after the routed output reservation plus compaction headroom. Retention scales
- * the message budget before headroom is deducted.
+ * Pressure and ratio retention scale against the full model context window,
+ * matching the pre-v0.1.7 compaction policy independently of output limits.
  *
  * @param policy - merged policy for the exact routed target.
  * @param contextWindow - positive adapter-owned capacity for that target.
- * @param reservedCompletionTokens - output tokens one routed request reserves.
  * @returns detached immutable pressure and retention budgets.
  */
 export function resolveCompactSpec(
   policy: ResolvedTargetPolicy,
   contextWindow: number,
-  reservedCompletionTokens: number,
 ): ResolvedCompactSpec {
   const targetKey = `${policy.target.provider}/${policy.target.model}`
   if (!Number.isInteger(contextWindow) || contextWindow <= 0) {
@@ -162,38 +159,9 @@ export function resolveCompactSpec(
       `BasicCompactionConfig: contextWindow (${contextWindow}) must be a positive integer`,
     )
   }
-  if (!Number.isInteger(reservedCompletionTokens) || reservedCompletionTokens < 0) {
-    throw new TargetPressureConfigError(
-      targetKey,
-      `BasicCompactionConfig: reservedCompletionTokens (${reservedCompletionTokens}) `
-      + 'must be a non-negative integer',
-    )
-  }
-  const messageBudgetTokens = contextWindow - reservedCompletionTokens
-  if (messageBudgetTokens <= 0) {
-    throw new TargetPressureConfigError(
-      targetKey,
-      `compaction-basic: ${targetKey} reserves ${reservedCompletionTokens} completion tokens `
-      + `of its ${contextWindow}-token context window, leaving no message budget; configure `
-      + "the adapter model's contextWindow above the effective request maxTokens",
-    )
-  }
-  const pressureBudgetTokens = messageBudgetTokens - policy.headroomTokens
-  if (pressureBudgetTokens <= 0) {
-    throw new TargetPressureConfigError(
-      targetKey,
-      `compaction-basic: ${targetKey} reserves ${reservedCompletionTokens} completion tokens `
-      + `and ${policy.headroomTokens} headroom tokens of its ${contextWindow}-token context `
-      + 'window, leaving no pressure budget; reduce the effective request maxTokens or '
-      + 'compaction headroomTokens, or configure a larger adapter model contextWindow',
-    )
-  }
-  const thresholdTokens = Math.floor(Math.min(
-    contextWindow * policy.thresholdRatio,
-    pressureBudgetTokens,
-  ))
+  const thresholdTokens = Math.floor(contextWindow * policy.thresholdRatio)
   const retainTokens = policy.retainTokens === undefined
-    ? Math.floor(messageBudgetTokens * policy.retainRatio)
+    ? Math.floor(contextWindow * policy.retainRatio)
     : policy.retainTokens
   if (retainTokens >= thresholdTokens) {
     throw new TargetPressureConfigError(
