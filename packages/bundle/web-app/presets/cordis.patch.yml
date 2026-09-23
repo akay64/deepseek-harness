@@ -141,6 +141,10 @@
               searchTimeoutMs: 60000
           - id: tool-cordis
             name: '@deepseek-ai/dsh-tool-cordis'
+          - id: tool-presentation
+            name: '@deepseek-ai/dsh-agent-tool-presentation'
+            config:
+              mode: ptc
           - id: skill-filesystem
             name: '@deepseek-ai/dsh-skill-filesystem'
             config:
