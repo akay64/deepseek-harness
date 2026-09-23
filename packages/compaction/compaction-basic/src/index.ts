@@ -56,17 +56,6 @@ function routedTarget(
   return { provider: config.provider, model: config.model }
 }
 
-/**
- * Output tokens the routed request reserves, which the provider charges to the
- * same window as the prompt. The effective envelope's own cap wins; otherwise
- * the adapter's per-request default, which the adapter materializes when that
- * envelope omits one. No declared cap means no reservation.
- */
-function reservedCompletionTokens(agent: Agent, defaultMaxTokens: number | undefined): number {
-  const configured = agent.session.requestHeader()?.config.maxTokens
-  return configured ?? defaultMaxTokens ?? 0
-}
-
 /** Resolve the conversation target used to select an optional policy override. */
 function conversationTarget(
   agent: Agent,
@@ -301,21 +290,17 @@ export class BasicCompactionEngine extends CompactionEngine {
       return this.compactRegion(range.start, range.end, agent, signal)
     }
 
-    const info = await this.ctx.llm.resolveModelInfo(target.provider, target.model, signal)
+    const context = (await this.ctx.llm.resolveModelInfo(target.provider, target.model, signal)).context
     assertNoActiveCompaction(agent.session, 'automatic pressure compaction')
     const targetKey = `${target.provider}/${target.model}`
-    if (info.context === undefined) {
+    if (context === undefined) {
       throw new TargetPressureConfigError(
         targetKey,
         `compaction-basic: no context capacity for ${targetKey}; `
         + 'configure contextWindow on that adapter model',
       )
     }
-    const spec = resolveCompactSpec(
-      policy,
-      info.context.contextWindow,
-      reservedCompletionTokens(agent, info.defaultMaxTokens),
-    )
+    const spec = resolveCompactSpec(policy, context.contextWindow)
     if (measurement.totalTokens < spec.thresholdTokens) return null
 
     // Once pressure qualifies, land the model-free pass before choosing a
