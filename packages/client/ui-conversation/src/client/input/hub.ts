@@ -2,7 +2,7 @@
  * Session-bound input registry and default-send routing for Conversation.
  * Each retained Session binding owns one shell, its input listeners, and its
  * catalog subscription. Saved drafts enter the model before the first lookup
- * returns; Session-scope disposal releases the shell and its resources.
+ * returns; staged attachments survive Session-scope disposal until browser cleanup.
  */
 import type {} from '@deepseek-ai/dsh-client-product-analytics/client'
 import type { ModelSelectionProjection } from '@deepseek-ai/dsh-api-session-controller/types'
@@ -54,6 +54,9 @@ interface ConversationAttachmentFace {
 /** Session-addressed input facade registry (SessionInputResolver face + composer-layer extras). */
 export class InputHub implements SessionInputResolver {
   private readonly shells = new WeakMap<SessionBinding, SessionInputShell>()
+  /** Selection only; Conversation owns the File objects, previews, and upload operations. */
+  private readonly draftAttachments = new Map<SessionId, readonly DraftAttachmentId[]>()
+  private disposed = false
 
   /**
    * @param ctx - client root context (services resolved lazily per call — boot order stays free).
@@ -62,7 +65,19 @@ export class InputHub implements SessionInputResolver {
   constructor(
     private readonly rootCtx: Context,
     private readonly t: TranslateNS<'conversation'>,
-  ) {}
+  ) {
+    rootCtx.effect(() => () => {
+      this.disposed = true
+      this.draftAttachments.clear()
+    }, 'conversation.input: browser draft selection')
+  }
+
+  hasDraft(sessionId: SessionId): boolean {
+    const binding = this.sessions().binding(sessionId)
+    const shell = binding === undefined ? undefined : this.shells.get(binding)
+    const text = shell?.snapshot.draft ?? readConversationDraft(sessionId).text
+    return text !== '' || (this.draftAttachments.get(sessionId)?.length ?? 0) > 0
+  }
 
   /**
    * Resolve the facade for one session-scope ctx (SessionInputResolver face).
@@ -99,6 +114,11 @@ export class InputHub implements SessionInputResolver {
     const { session, ctx: actx } = binding
     const shell = new SessionInputShell({
       actx,
+      attachmentsChanged: (ids) => {
+        if (this.disposed || this.sessions().binding(binding.sessionId) !== binding) return
+        if (ids.length === 0) this.draftAttachments.delete(binding.sessionId)
+        else this.draftAttachments.set(binding.sessionId, ids)
+      },
       submissionState: () => {
         const state = session.getSnapshot()
         const model = session.projections.faceOf('modelSelection').getSnapshot() as ModelSelectionProjection | undefined
@@ -140,8 +160,7 @@ export class InputHub implements SessionInputResolver {
       },
     })
     this.shells.set(binding, shell)
-    // The one teardown axis: listeners, shell, and map entries all ride the
-    // scope fiber (nothing here outlives the scope).
+    // The Session scope owns editor/listener cleanup, not staged attachment lifetime.
     actx.effect(() => {
       const offs = [
         actx.on('slash/input-begin-command', req =>
@@ -155,10 +174,13 @@ export class InputHub implements SessionInputResolver {
       ]
       return () => {
         for (const off of offs) off()
+        const staged = new Set(shell.snapshot.phase === 'submitting' ? [] : shell.snapshot.attachmentIds)
         const drafts = shell.dispose()
         this.shells.delete(binding)
         const conversation = this.rootCtx.get('conversation') as ConversationAttachmentFace | undefined
-        for (const attachmentId of drafts) conversation?.releaseDraftAttachment(attachmentId)
+        for (const attachmentId of drafts) {
+          if (!staged.has(attachmentId)) conversation?.releaseDraftAttachment(attachmentId)
+        }
       }
     }, 'conversation.input: session shell')
     actx.inject(['inputTriggers'], (scope) => {
@@ -168,6 +190,7 @@ export class InputHub implements SessionInputResolver {
       }, 'conversation.input: reference catalogs')
     })
     shell.setDraft(readConversationDraft(binding.sessionId))
+    shell.addAttachments(this.draftAttachments.get(binding.sessionId) ?? [])
     return shell
   }
 

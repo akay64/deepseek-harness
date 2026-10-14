@@ -66,7 +66,7 @@ export interface UiWorkspace {
    */
   connectWorkspace(workspaceId: WorkspaceId): Promise<SessionId>
   /**
-   * Create a fresh Session, or reuse a blank when preparing an explicit draft. A creation the Host
+   * Resume an unsent Workspace draft, or create a fresh Session. Explicit draft options may reuse a blank. A creation the Host
    * refuses is shown through the Workspace notice and leaves the selection as it was.
    * @param workspaceId - explicit target; absent inherits the current or most recent Workspace.
    * @param options - initial content; existing text or attachments are preserved unless clearPreviousDraft is true.
@@ -182,7 +182,7 @@ class UiWorkspaceService extends Service implements UiWorkspace {
     if (workspace === undefined) {
       throw new Error(`uiWorkspace.connectWorkspace: unknown workspace ${workspaceId}`)
     }
-    if (!reuse) return this.sessions.create({ workspaceId })
+    if (!reuse) return this.reuseOrCreateBlank(workspace, true)
     const inflight = this.connecting.get(workspaceId)
     if (inflight !== undefined) return inflight
 
@@ -192,13 +192,14 @@ class UiWorkspaceService extends Service implements UiWorkspace {
     return attempt
   }
 
-  private reuseOrCreateBlank(workspace: WorkspaceView): Promise<SessionId> {
+  private reuseOrCreateBlank(workspace: WorkspaceView, draftOnly = false): Promise<SessionId> {
     const archived = this.workspaces.list.getSnapshot().archivedSessionIds
     const sessions = this.sessions.list.getSnapshot()
     for (const id of sessions.ids) {
       const summary = sessions.byId[id]
       if (summary === undefined || !summary.blank || summary.cwd !== workspace.path
         || !workspace.sessionIds.includes(id) || archived.includes(id)) continue
+      if (draftOnly && this.ctx.get('conversation')?.input.hasDraft(id) !== true) continue
       return this.reuseBlank(workspace.workspaceId, id)
     }
     return this.sessions.create({ workspaceId: workspace.workspaceId })
