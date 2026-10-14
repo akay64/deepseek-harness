@@ -76,7 +76,7 @@
                   auto: true
                   thresholdRatio: 0.95
                   retainTokens: 16000
-                  maxTokens: 24000
+                  maxTokens: 12000
                   compactionRetries: 1
                   maxOverflowRetries: 1
                   modelPolicies: []
