@@ -117,8 +117,10 @@ describe('ConversationController', () => {
     await b.runtime.dispose()
   })
 
-  it('releases draft previews when their session scope is disposed', async () => {
+  it.each([true, false])('keeps staged previews across Session disposal (blank=%s) and releases them with the browser owner', async (blank) => {
     const b = await bench()
+    await b.runtime.sessions.updateSessionSnapshot('s1', (draft) => { draft.blank = blank })
+    await b.runtime.sessions.updateSummary('s1', { blank })
     const created = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:draft-1')
     const revoked = vi.spyOn(URL, 'revokeObjectURL').mockReturnValue(undefined)
     try {
@@ -129,13 +131,112 @@ describe('ConversationController', () => {
       b.root.input.for(b.runtime.sessions.scope('s1')!).addAttachments([attachment.id])
       b.reference.release()
       await b.runtime.flush()
+      expect(b.root.resolveDraftAttachments([attachment.id])).toEqual([attachment])
+      expect(revoked).not.toHaveBeenCalled()
+      expect(b.hub.hasDraft(b.reference.sessionId)).toBe(true)
+      const restored = b.runtime.sessions.retain(b.reference.sessionId)
+      await restored.ready
+      const shell = b.hub.shellFor(restored.binding)
+      expect(shell).not.toBe(b.shell)
+      expect(shell.snapshot.attachmentIds).toEqual([attachment.id])
+      restored.release()
+      await b.runtime.dispose()
       expect(b.root.resolveDraftAttachments([attachment.id])).toEqual([])
-      expect(revoked).toHaveBeenCalledWith('blob:draft-1')
+      expect(revoked).toHaveBeenCalledExactlyOnceWith('blob:draft-1')
     } finally {
       created.mockRestore()
       revoked.mockRestore()
     }
     await b.runtime.dispose()
+  })
+
+  it('restores staged files immediately without cancelling or restarting an active upload', async () => {
+    const b = await bench()
+    const session = b.runtime.sessions.binding('s1')!.session
+    const result = Promise.withResolvers<{
+      ok: true
+      value: { receiptId: string; file: { attachmentId: string; name: string; bytes: number } }
+    }>()
+    let uploadSignal: AbortSignal | undefined
+    const upload = vi.fn((_file: Blob | Uint8Array, _name?: string, signal?: AbortSignal) => {
+      uploadSignal = signal
+      return result.promise
+    })
+    ;(session as { uploadFile?: unknown }).uploadFile = upload
+    const [attachment] = b.root.createDrafts(session.sessionId, [new File(['notes'], 'notes.txt', { type: 'text/plain' })])
+    if (attachment === undefined) throw new Error('file draft missing')
+    try {
+      b.shell.addAttachments([attachment.id])
+      await vi.waitFor(() => { expect(upload).toHaveBeenCalledOnce() })
+      b.reference.release()
+      const restored = b.runtime.sessions.retain(b.reference.sessionId)
+      // Resolve before the old scope's async cleanup, not only after a settled switch.
+      const shell = b.hub.shellFor(restored.binding)
+      expect(shell.snapshot.attachmentIds).toEqual([attachment.id])
+      await restored.ready
+      await b.runtime.flush()
+      expect(uploadSignal?.aborted).toBe(false)
+      expect(b.root.resolveDraftAttachments([attachment.id])).toEqual([attachment])
+      result.resolve({ ok: true, value: {
+        receiptId: 'retained-receipt', file: { attachmentId: 'retained-file', name: 'notes.txt', bytes: 5 },
+      } })
+      await vi.waitFor(() => {
+        expect(b.root.fileUploads.getSnapshot()[attachment.id]).toMatchObject({ status: 'ready', receiptId: 'retained-receipt' })
+      })
+      expect(upload).toHaveBeenCalledOnce()
+      expect(shell.removeAttachment(attachment.id)).toBe(true)
+      b.root.releaseDraftAttachment(attachment.id)
+      restored.release()
+      await b.runtime.flush()
+      const reopened = b.runtime.sessions.retain(b.reference.sessionId)
+      await reopened.ready
+      expect(b.hub.shellFor(reopened.binding).snapshot.attachmentIds).toEqual([])
+      expect(b.hub.hasDraft(b.reference.sessionId)).toBe(false)
+      reopened.release()
+    } finally {
+      result.resolve({ ok: true, value: {
+        receiptId: 'retained-receipt', file: { attachmentId: 'retained-file', name: 'notes.txt', bytes: 5 },
+      } })
+      await b.runtime.dispose()
+    }
+  })
+
+  it('keeps attachment selections isolated between Sessions and clears successful-send selection', async () => {
+    const b = await bench()
+    const created = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:isolated')
+    const revoked = vi.spyOn(URL, 'revokeObjectURL').mockReturnValue(undefined)
+    try {
+      const [attachment] = b.root.createDrafts(b.reference.sessionId, [
+        new File([Uint8Array.of(1)], 'isolated.png', { type: 'image/png' }),
+      ])
+      if (attachment === undefined) throw new Error('image draft missing')
+      b.shell.addAttachments([attachment.id])
+      await b.runtime.sessions.add({ id: 's2' })
+      const other = b.runtime.sessions.retain('s2' as SessionId)
+      await other.ready
+      b.reference.release()
+      await b.runtime.flush()
+      expect(b.hub.shellFor(other.binding).snapshot.attachmentIds).toEqual([])
+      const restored = b.runtime.sessions.retain(b.reference.sessionId)
+      await restored.ready
+      const shell = b.hub.shellFor(restored.binding)
+      expect(shell.snapshot.attachmentIds).toEqual([attachment.id])
+      shell.commitSend([attachment.id])
+      b.root.releaseDraftAttachment(attachment.id)
+      restored.release()
+      await b.runtime.flush()
+      const reopened = b.runtime.sessions.retain(b.reference.sessionId)
+      await reopened.ready
+      expect(b.hub.shellFor(reopened.binding).snapshot.attachmentIds).toEqual([])
+      expect(b.hub.hasDraft(b.reference.sessionId)).toBe(false)
+      expect(revoked).toHaveBeenCalledExactlyOnceWith('blob:isolated')
+      reopened.release()
+      other.release()
+    } finally {
+      await b.runtime.dispose()
+      created.mockRestore()
+      revoked.mockRestore()
+    }
   })
 
   it('releases an unsettled send preview during structural Session teardown', async () => {
@@ -158,6 +259,44 @@ describe('ConversationController', () => {
       revoked.mockRestore()
     }
     await b.runtime.dispose()
+  })
+
+  it('does not restore attachments owned by a submitting command after Session teardown', async () => {
+    const b = await bench()
+    const created = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:command-flight')
+    const revoked = vi.spyOn(URL, 'revokeObjectURL').mockReturnValue(undefined)
+    const serialize = vi.spyOn(b.root, 'serializeDraftAttachments').mockResolvedValue({ attachments: [] })
+    const outcome = Promise.withResolvers<{ kind: 'error' }>()
+    const started = Promise.withResolvers<undefined>()
+    try {
+      const [attachment] = b.root.createDrafts(b.reference.sessionId, [
+        new File([Uint8Array.of(1)], 'command.png', { type: 'image/png' }),
+      ])
+      if (attachment === undefined) throw new Error('command attachment missing')
+      b.shell.setDraft('/pending ')
+      expect(b.shell.beginCommand({
+        name: 'pending', token: '/pending ', attachments: true,
+        submit: () => { started.resolve(undefined); return outcome.promise },
+      }, { start: 0, end: '/pending '.length, draftRev: b.shell.snapshot.draftRev })).toBe(true)
+      b.shell.addAttachments([attachment.id])
+      b.shell.submit()
+      await started.promise
+      expect(b.shell.snapshot.phase).toBe('submitting')
+      b.reference.release()
+      const restored = b.runtime.sessions.retain(b.reference.sessionId)
+      expect(b.hub.shellFor(restored.binding).snapshot.attachmentIds).toEqual([])
+      await restored.ready
+      await b.runtime.flush()
+      expect(b.root.resolveDraftAttachments([attachment.id])).toEqual([])
+      expect(revoked).toHaveBeenCalledExactlyOnceWith('blob:command-flight')
+      restored.release()
+    } finally {
+      outcome.resolve({ kind: 'error' })
+      await b.runtime.dispose()
+      serialize.mockRestore()
+      created.mockRestore()
+      revoked.mockRestore()
+    }
   })
 
   it('classifies image MIME drafts as images and every other file as an uploading file draft', async () => {

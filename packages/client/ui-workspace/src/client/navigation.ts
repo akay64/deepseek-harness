@@ -79,7 +79,7 @@ export interface UiWorkspace {
    */
   connectWorkspace(workspaceId: WorkspaceId, options?: Pick<StartSessionOptions, 'agentPreset'>): Promise<SessionId>
   /**
-   * Create a fresh Session, or reuse a blank when preparing an explicit draft. A creation the Host
+   * Resume an unsent Workspace draft, or create a fresh Session. Explicit draft options may reuse a blank. A creation the Host
    * refuses is shown through the Workspace notice and leaves the selection as it was.
    * @param workspaceId - explicit target; absent inherits the current or most recent Workspace.
    * @param options - initial content and the reused blank's preset; existing text or attachments
@@ -195,7 +195,7 @@ class UiWorkspaceService extends Service implements UiWorkspace {
   }
 
   /**
-   * @param reuse - preset for the reused or created blank; absent creates a fresh Session.
+   * @param reuse - preset for the reused or created blank; absent resumes a draft or creates a fresh Session.
    */
   private async connectBlank(
     workspaceId: WorkspaceId,
@@ -206,7 +206,7 @@ class UiWorkspaceService extends Service implements UiWorkspace {
     if (workspace === undefined) {
       throw new Error(`uiWorkspace.connectWorkspace: unknown workspace ${workspaceId}`)
     }
-    if (reuse === undefined) return this.sessions.create({ workspaceId })
+    if (reuse === undefined) return this.createInWorkspace(workspace, {}, true)
     const inflight = this.connecting.get(workspaceId)
     if (inflight !== undefined && inflight.agentPreset === reuse.agentPreset) return inflight.attempt
 
@@ -217,14 +217,20 @@ class UiWorkspaceService extends Service implements UiWorkspace {
     return attempt
   }
 
-  private createInWorkspace(workspace: WorkspaceView, options: Pick<StartSessionOptions, 'agentPreset'>): Promise<SessionId> {
+  private createInWorkspace(
+    workspace: WorkspaceView,
+    options: Pick<StartSessionOptions, 'agentPreset'>,
+    draftOnly = false,
+  ): Promise<SessionId> {
     const archived = this.workspaces.list.getSnapshot().archivedSessionIds
     const sessions = this.sessions.list.getSnapshot()
     const blank = sessions.ids.find((id) => {
       const summary = sessions.byId[id]
       return summary !== undefined && summary.blank && summary.cwd === workspace.path
         && workspace.sessionIds.includes(id) && !archived.includes(id)
+        && (!draftOnly || this.ctx.get('conversation')?.input.hasDraft(id) === true)
     })
+    if (draftOnly && blank !== undefined) return this.restoreBlank(workspace.workspaceId, blank)
     return this.createNamed({
       workspaceId: workspace.workspaceId,
       ...(blank === undefined ? {} : { sessionId: blank }),

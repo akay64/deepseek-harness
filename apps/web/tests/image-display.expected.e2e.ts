@@ -141,6 +141,59 @@ it('accepts pasted images into the composer rail in order and removes them', asy
   expect(files.textContent).toContain('notes.txt')
 })
 
+it('resumes a blank draft through New Session and restores mixed attachments in a started Session', async () => {
+  const remote = mountAssembledApp()
+  const pending = '[role="group"][aria-label="Pending attachments"]'
+  const draftComposer = await createAssembledSessionComposer(remote)
+  const draftId = draftComposer.closest('[data-conversation-session]')?.getAttribute('data-conversation-session')
+  expect(draftId).toBeTruthy()
+  const paste = (composer: HTMLElement, files: readonly File[]) => fireEvent.paste(composer, {
+    clipboardData: {
+      items: files.map(file => ({ kind: 'file', type: file.type, getAsFile: () => file })),
+      getData: () => '',
+    },
+  })
+  paste(draftComposer, [new File([Uint8Array.of(137, 80, 78, 71)], 'draft.png', { type: 'image/png' })])
+  await waitFor(() => { expect(document.querySelector(`${pending} img`)?.getAttribute('alt')).toBe('draft.png') })
+  await openFixtureSession()
+  await waitFor(() => { expect(document.querySelector(pending)).toBeNull() })
+  const restored = await createAssembledSessionComposer(remote)
+  expect(restored.closest('[data-conversation-session]')?.getAttribute('data-conversation-session')).toBe(draftId)
+  await waitFor(() => { expect(document.querySelector(`${pending} img`)?.getAttribute('alt')).toBe('draft.png') })
+
+  await openFixtureSession()
+  const startedComposer = document.querySelector<HTMLElement>('[data-composer-input][contenteditable="true"]')
+  if (startedComposer === null) throw new Error('started Session composer missing')
+  const startedId = startedComposer.closest('[data-conversation-session]')?.getAttribute('data-conversation-session')
+  paste(startedComposer, [
+    new File(['retained upload'], 'retained.txt', { type: 'text/plain' }),
+    new File([Uint8Array.of(137, 80, 78, 71)], 'started.png', { type: 'image/png' }),
+  ])
+  await waitFor(() => {
+    expect(document.querySelector(pending)?.textContent).toContain('retained.txt')
+    expect(document.querySelector(`${pending} img`)?.getAttribute('alt')).toBe('started.png')
+  })
+  await createAssembledSessionComposer(remote)
+  await openFixtureSession()
+  await waitFor(() => {
+    const current = document.querySelector('[data-conversation-session]')?.getAttribute('data-conversation-session')
+    expect(current).toBe(startedId)
+    expect(document.querySelector(pending)?.textContent).toContain('retained.txt')
+    expect(document.querySelector(`${pending} img`)?.getAttribute('alt')).toBe('started.png')
+  })
+  expect({
+    blankDraftResumed: restored.closest('[data-conversation-session]')?.getAttribute('data-conversation-session') === draftId,
+    startedFileRestored: document.querySelector(pending)?.textContent?.includes('retained.txt') ?? false,
+    startedImage: document.querySelector(`${pending} img`)?.getAttribute('alt'),
+  }).toMatchInlineSnapshot(`
+    {
+      "blankDraftResumed": true,
+      "startedFileRestored": true,
+      "startedImage": "started.png",
+    }
+  `)
+})
+
 it('accepts a whole-page drop under the limits-labeled overlay and refuses an over-limit batch at intake', async () => {
   const remote = mountAssembledApp()
   const textarea = await createAssembledSessionComposer(remote)

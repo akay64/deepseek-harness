@@ -49,6 +49,8 @@ export interface SessionInputDeps {
   inputTriggers?: (() => InputTriggerController | undefined) | undefined
   /** PopupSelect shell face resolver (dismissal on submit lock / escape). */
   popup?: (() => PopupDismissFace | undefined) | undefined
+  /** Mirror staged attachment selection into the browser-lifetime draft owner. */
+  attachmentsChanged?: (ids: readonly DraftAttachmentId[]) => void
   /** Agent Inbox projection; its next-turn list is overlaid onto InputState.queue. */
   inbox?: ObservableSnapshot<InboxState | undefined> | undefined
   /**
@@ -599,7 +601,7 @@ export class SessionInputShell implements SessionInput {
   /**
    * Teardown the shell and return every browser-owned attachment still retained by
    * the draft or an unsettled default send.
-   * @returns attachment ids the scope disposer must release.
+   * @returns retained ids; the scope disposer releases unsettled sends but preserves staged drafts.
    */
   dispose(): readonly DraftAttachmentId[] {
     if (this.disposed) return []
@@ -936,6 +938,11 @@ export class SessionInputShell implements SessionInput {
 
   private publish(): void {
     const next = this.compose()
+    const previous = this.state.getSnapshot()
+    if (next.attachmentIds !== previous.attachmentIds
+      || (next.phase === 'submitting') !== (previous.phase === 'submitting')) {
+      this.deps.attachmentsChanged?.(next.phase === 'submitting' ? [] : next.attachmentIds)
+    }
     this.state.set(next)
     const draft = this.draftSnapshot
     if (draft !== this.lastPublishedDraft) {

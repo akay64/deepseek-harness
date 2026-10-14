@@ -8,6 +8,7 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 import type { SessionBinding } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { InboxState } from '@deepseek-ai/dsh-agent/types'
 import type { ObservableSnapshot, SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { Branded } from '@deepseek-ai/dsh-brand'
@@ -217,6 +218,12 @@ export interface SessionInput extends InputTarget {
 
 /** Session-addressed access to the per-session input facade. */
 export interface SessionInputResolver {
+  /**
+   * Check unsent text or staged attachments without retaining a Session.
+   * @param sessionId - draft's Session identity.
+   * @returns whether live or restored content remains in that Session's draft.
+   */
+  hasDraft(sessionId: SessionId): boolean
   /** Resolve the facade for one session-scope ctx. */
   for(actx: Context): SessionInput
   /**

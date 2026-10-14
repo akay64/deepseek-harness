@@ -116,6 +116,19 @@ class TriggerProvider extends Service {
   }
 }
 
+it('detects stored and live unsent content without retaining another Session', async () => {
+  const b = await storedSession(saved)
+  const retain = vi.spyOn(b.sessions, 'retain')
+  expect(b.hub.hasDraft(b.id)).toBe(true)
+  expect(retain).not.toHaveBeenCalled()
+  const shell = b.hub.shellFor(b.binding)
+  shell.setDraft('')
+  expect(b.hub.hasDraft(b.id)).toBe(false)
+  shell.setDraft('edited draft')
+  expect(b.hub.hasDraft(b.id)).toBe(true)
+  expect(retain).not.toHaveBeenCalled()
+})
+
 it('leaves trigger subscription to lifecycle activation rather than construction or draft writes', async () => {
   const b = await storedSession(saved)
   const source = catalog(['saved'])
