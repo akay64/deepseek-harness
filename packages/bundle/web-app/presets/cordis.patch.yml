@@ -71,14 +71,6 @@
             config:
               - id: compaction-basic
                 name: '@deepseek-ai/dsh-compaction-basic'
-                config:
-                  auto: true
-                  thresholdRatio: 0.95
-                  retainTokens: 16000
-                  maxTokens: 12000
-                  compactionRetries: 1
-                  maxOverflowRetries: 1
-                  modelPolicies: []
               - id: command-compact
                 name: '@deepseek-ai/dsh-command-compact'
               - id: tool-result-pruner
