@@ -16,6 +16,7 @@ The package carries browser-to-Host Remote calls, exact Fetch responses, and con
 - [Use this package](#use-this-package)
 - [Browser authentication and request trust](#browser-authentication-and-request-trust)
 - [Connection generation](#connection-generation)
+- [Remote administration opt-in](#remote-administration-opt-in)
 - [Model Experience](#model-experience)
 - [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
 - [Dev Note](#dev-note)
@@ -61,6 +62,14 @@ Set the Host Connection row's `config.recovery` to override retry caps, the grow
 
 
 <a id="model-experience"></a>
+<a id="remote-administration-opt-in"></a>
+
+## Remote administration opt-in
+
+By default, non-loopback browser pages hide Host-administration controls. Set `DSH_WEB_ALLOW_REMOTE_ADMIN=1` before starting the Host, or set the Connection row's `allowRemoteAdmin: true`, to expose persistent Host settings, the configuration document action, and compatible Skills/Tools settings extensions to remote pages. Only the literal environment value `1` enables this opt-in. Restart the Host and refresh open pages after changing it.
+
+`ctx.connection.canAdminister` and `ctx.remote.$host.canAdminister` report this presentation capability; `isLoopback` continues to describe the actual page authority. The opt-in is not an authentication mechanism or a new per-method authorization tier: existing browser-session authentication and Host/Origin checks remain in force. `DSH_WEB_NO_AUTH=1` is a separate bypass and does not enable remote administration by itself. When using both flags, restrict access to a trusted network such as a private tailnet.
+
 ## Model Experience
 
 None, as the wire consumer layer moves already-composed messages between browser and host; nothing here reaches a model request.

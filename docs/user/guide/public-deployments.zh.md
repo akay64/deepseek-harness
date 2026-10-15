@@ -26,6 +26,16 @@ dsh --profile web --public-url https://app.example/ui/ --trusted-host app.exampl
 
 无论是公告 URL 还是栅栏都不保护监听端口本身，因此请把端口限制在可信代理或网络内。
 
+## 在受信任的远程部署中启用管理
+
+远程页面默认隐藏 Host 管理控件。要开放持久化设置和兼容的管理插件，请使用以下命令启动 Host：
+
+```sh
+DSH_WEB_ALLOW_REMOTE_ADMIN=1 dsh web --public-url https://app.example/ --trusted-host app.example
+```
+
+此选项不会改变 `isLoopback`，也不会禁用浏览器身份验证或 Host/Origin 检查。它独立于 `DSH_WEB_NO_AUTH`；如果有意绕过身份验证，必须由外围网络提供访问边界。修改标志后请重启 Host 并刷新浏览器。
+
 ## 保护外部链路
 
 可以在代理处、监听器本身或两者上终止 TLS；`--public-url` 仍只是公告。面向浏览器的 `http://` 根会明文暴露启动 token。`https://` 代理根保护浏览器到代理这一段；代理与监听器之间是否加密取决于监听器的 TLS 配置。

@@ -121,6 +121,8 @@ export interface RemoteHostFacts {
   readonly home: string | undefined
   /** Whether the carrier connects to the local Host. */
   readonly isLoopback: boolean
+  /** Whether this page may expose Host administration controls. */
+  readonly canAdminister: boolean
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -194,7 +196,7 @@ class ClientRemoteService extends Service implements ClientRemote {
     // itself changed. isLoopback is fixed for the page lifetime.
     const home = this.connection.generation.getSnapshot()?.host.home
     if (this.hostFacts === undefined || this.hostFacts.home !== home) {
-      this.hostFacts = { home, isLoopback: this.connection.isLoopback }
+      this.hostFacts = { home, isLoopback: this.connection.isLoopback, canAdminister: this.connection.canAdminister }
     }
     return this.hostFacts
   }

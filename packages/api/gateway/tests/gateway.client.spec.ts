@@ -588,7 +588,7 @@ describe('Client Remote transport readiness', () => {
     const generation = new GenerationHarness()
     const live: { snapshot: ConnectionGeneration | undefined } = { snapshot: undefined }
     const handle = {
-      isLoopback: true,
+      isLoopback: true, canAdminister: true,
       generation: { getSnapshot: () => live.snapshot, subscribe: () => () => {} },
       rpc: {
         call: vi.fn<ConnectionHandle['rpc']['call']>(),
@@ -603,12 +603,12 @@ describe('Client Remote transport readiness', () => {
     const remote = ctx.remote
 
     const beforeReady = remote.$host
-    expect(beforeReady).toEqual({ home: undefined, isLoopback: true })
+    expect(beforeReady).toEqual({ home: undefined, isLoopback: true, canAdminister: true })
     expect(remote.$host).toBe(beforeReady)
 
     live.snapshot = { id: 1, host: { home: '/hosts/primary' } }
     const afterReady = remote.$host
-    expect(afterReady).toEqual({ home: '/hosts/primary', isLoopback: true })
+    expect(afterReady).toEqual({ home: '/hosts/primary', isLoopback: true, canAdminister: true })
     expect(afterReady).not.toBe(beforeReady)
     expect(remote.$host).toBe(afterReady)
 

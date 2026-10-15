@@ -442,6 +442,8 @@ export type Config = LocalConfig
 export interface ConnectionConfig {
   /** Browser recovery timing, injected into each served page. */
   recovery?: ConnectionRecoveryConfig
+  /** Expose Host administration controls to remote browsers. Authentication and Host/Origin checks still apply. */
+  allowRemoteAdmin?: boolean
   /**
    * Authorities this deployment serves beyond loopback: exact `host:port`, or
    * port-less `host` matching any port. The fence accepts loopback and the
