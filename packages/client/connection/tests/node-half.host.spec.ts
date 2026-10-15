@@ -3,7 +3,9 @@ import { EventEmitter } from 'node:events'
 import { createServer, request as httpRequest } from 'node:http'
 import { Readable } from 'node:stream'
 import { Context } from '@deepseek-ai/cordis'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+
+afterEach(() => { vi.unstubAllEnvs() })
 import type { AddressInfo } from 'node:net'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { AttachmentStore } from '@deepseek-ai/dsh-attachment'
@@ -268,6 +270,27 @@ describe('connection node half', () => {
     }
   })
 
+  it.each([['1', true], ['0', false], ['true', false], ['', false]] as const)('requires explicit remote-admin opt-in, independent of no-auth: %s', async (value, expected) => {
+    vi.stubEnv('DSH_WEB_ALLOW_REMOTE_ADMIN', value)
+    vi.stubEnv('DSH_WEB_NO_AUTH', '1')
+    const { ctx, dispose } = await mounted()
+    try {
+      const rows: IndexInjection[] = []
+      ctx.emit('webserver/index-inject', rows)
+      expect(rows).toContainEqual({ kind: 'global', name: '__DSH_ALLOW_REMOTE_ADMIN__', value: expected })
+    } finally { await dispose() }
+  })
+
+  it('allows an explicit deployment configuration to opt into remote administration', async () => {
+    vi.stubEnv('DSH_WEB_ALLOW_REMOTE_ADMIN', '')
+    const { ctx, dispose } = await mounted({ allowRemoteAdmin: true })
+    try {
+      const rows: IndexInjection[] = []
+      ctx.emit('webserver/index-inject', rows)
+      expect(rows).toContainEqual({ kind: 'global', name: '__DSH_ALLOW_REMOTE_ADMIN__', value: true })
+    } finally { await dispose() }
+  })
+
   it('injects validated browser recovery timing and withdraws it on disposal', async () => {
     const { ctx, dispose } = await mounted({ recovery: { generationReadyTimeoutMs: 25_000 } })
     try {
@@ -278,7 +301,7 @@ describe('connection node half', () => {
           backoffBaseMs: 500, backoffFactor: 2, backoffMaxMs: 10_000,
           generationReadyWarnMs: 3_000, generationReadyTimeoutMs: 25_000,
         },
-      }])
+      }, { kind: 'global', name: '__DSH_ALLOW_REMOTE_ADMIN__', value: false }])
       await dispose()
       const after: IndexInjection[] = []
       ctx.emit('webserver/index-inject', after)

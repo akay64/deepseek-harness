@@ -26,6 +26,16 @@ The fence accepts loopback, the listener's own bind address, and every authority
 
 Neither the advertised URL nor the fence protects the listening port itself, so restrict the port to the trusted proxy or network.
 
+## Enable administration on a trusted remote deployment
+
+Remote pages hide Host-administration controls by default. To expose persistent settings and compatible administration plugins, start the Host with:
+
+```sh
+DSH_WEB_ALLOW_REMOTE_ADMIN=1 dsh web --public-url https://app.example/ --trusted-host app.example
+```
+
+This opt-in leaves `isLoopback` unchanged and does not disable browser authentication or Host/Origin checks. It is independent of `DSH_WEB_NO_AUTH`; if authentication is deliberately bypassed, the surrounding network must supply the access boundary. Restart the Host and refresh browsers after changing the flag.
+
 ## Secure the external leg
 
 Terminate TLS at the proxy, on the listener itself, or on both; `--public-url` remains an advertisement. An `http://` browser-facing root exposes the launch token in plaintext. An `https://` proxy root protects the browser-to-proxy leg; encryption between proxy and listener depends on the listener's TLS configuration.

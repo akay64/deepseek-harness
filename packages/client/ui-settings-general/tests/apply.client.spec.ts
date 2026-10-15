@@ -24,6 +24,7 @@ import type { SettingsDocumentActionInjected } from '../src/client/SettingsDocum
 const SELF = '@deepseek-ai/dsh-client-ui-settings-general'
 const SIDEBAR = '@deepseek-ai/dsh-client-ui-sidebar'
 const it = createClientTest({ roster: webApp })
+const remoteAdminIt = createClientTest({ roster: webApp }, { allowRemoteAdmin: true })
 /** The whole roster's first boot pays the cold module transform of every plugin package. */
 const COLD_BOOT_TIMEOUT_MS = 60_000
 /** Dictionary namespace this plugin owns; every seat it fills declares it. */
@@ -188,6 +189,21 @@ describe('ui-settings-general apply', () => {
     c.connection.reconnect()
     await c.mock.streams.opened('$events', 2)
     await vi.waitFor(() => { expect(c.mock.log.calls('settings/describe')).toHaveLength(3) })
+  })
+
+  remoteAdminIt('exposes persistent settings and the Host document action for an opted-in remote browser', async ({ mock, start }) => {
+    const previousUrl = location.href
+    setPageUrl('https://dsh.example.test/')
+    onTestFinished(() => { setPageUrl(previousUrl) })
+    const { c } = await client(mock, start, true)
+    expect(c.connection.isLoopback).toBe(false)
+    expect(c.connection.canAdminister).toBe(true)
+    expect(ownEntries(c, 'settings.action')).toHaveLength(1)
+    expect(c.mock.log.calls('settings/describe').length).toBeGreaterThan(0)
+    expect(c.ctx.locale.getSnapshot().active).toBe('zh')
+    await c.unload(SELF)
+    await c.flush()
+    for (const [name] of SEATS) expect(ownEntries(c, name)).toEqual([])
   })
 
   it('keeps Host preferences off-loopback and withholds only the native document action', async ({ mock, start }) => {

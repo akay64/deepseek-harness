@@ -117,6 +117,7 @@ export interface ClientTransportHooks {
 interface ClientTransportGlobal {
   __DSH_TRANSPORT__?: ClientTransportHooks
   __DSH_CONNECTION_RECOVERY__?: unknown
+  __DSH_ALLOW_REMOTE_ADMIN__?: unknown
 }
 
 /** Browser location fields used to classify loopback authority. */
@@ -132,6 +133,8 @@ export interface ConnectionInstallOptions {
   readonly transport?: ClientTransportHooks
   /** Reconnect timing overrides; omitted fields use controller defaults. */
   readonly recovery?: ConnectionRecoveryConfig
+  /** Host-authorized opt-in for administration from a non-loopback page. */
+  readonly allowRemoteAdmin?: boolean
   /** Page location; omit for a non-browser composition. */
   readonly location?: ConnectionLocation
 }
@@ -149,6 +152,8 @@ export interface ConnectionHandle {
    * ({@link ClientTransportHooks.ownsHost}), or the context is not a browser.
    */
   readonly isLoopback: boolean
+  /** Whether Host administration controls are enabled for this page; independent of browser authentication. */
+  readonly canAdminister: boolean
   /** Current Remote event generation and the Host facts carried by its opening frame. */
   readonly generation: ConnectionGenerationState
   /** Current recovery lifecycle for connection-specific consumers. */
@@ -262,10 +267,12 @@ export function installConnection(ctx: Context, options: ConnectionInstallOption
     publishGeneration(undefined)
     publishState(undefined)
   }
+  const isLoopback = transport?.ownsHost === true || pageLocation === undefined || isLoopbackHostname(pageLocation.hostname)
   const handle: ConnectionHandle = {
     interactions,
     openWebSocket: path => openConnectionWebSocket(path, transport?.createWebSocket, transport?.streamBaseUrl),
-    isLoopback: transport?.ownsHost === true || pageLocation === undefined || isLoopbackHostname(pageLocation.hostname),
+    isLoopback,
+    canAdminister: isLoopback || options.allowRemoteAdmin === true,
     generation: {
       getSnapshot: () => generation,
       subscribe: (listener) => {
@@ -341,6 +348,7 @@ export function apply(ctx: Context): void {
   installConnection(ctx, {
     ...(transport === undefined ? {} : { transport }),
     recovery: resolveConnectionConfig(globals.__DSH_CONNECTION_RECOVERY__),
+    allowRemoteAdmin: globals.__DSH_ALLOW_REMOTE_ADMIN__ === true,
     ...(pageLocation === undefined ? {} : { location: pageLocation }),
   })
 }

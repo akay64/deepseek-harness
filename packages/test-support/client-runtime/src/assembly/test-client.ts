@@ -32,6 +32,8 @@ const GENERATED_REMOTE_PACKAGES: readonly string[] = [REMOTES_PACKAGE, REMOTE_AC
 
 /** Carrier options. */
 export interface TestClientOptions {
+  /** Simulate the Host bootstrap opt-in for remote administration. */
+  readonly allowRemoteAdmin?: boolean
   /**
    * Mount `uiRenderer` into an element (a fresh `document.body` child when `true`); requires jsdom and a roster
    * that provides `uiRenderer`. Default false.
@@ -236,6 +238,7 @@ export class TestClient {
             installConnection(connectionCtx, {
               interactions: 'answer',
               transport: { rpc: mock.rpc },
+              allowRemoteAdmin: options.allowRemoteAdmin === true,
               ...(pageLocation === undefined ? {} : { location: pageLocation }),
             })
           },

@@ -127,6 +127,15 @@ describe('connection client apply', () => {
     ;(globalThis as Win).location = { hostname: 'localhost' }
     const handle = await mount()
     expect(handle.isLoopback).toBe(true)
+    expect(handle.canAdminister).toBe(true)
+  })
+
+  it.each([undefined, false, '1', true])('only enables remote administration for a boolean Host bootstrap: %s', async (value) => {
+    ;(globalThis as Win).location = { hostname: 'dsh.example.test' }
+    vi.stubGlobal('__DSH_ALLOW_REMOTE_ADMIN__', value)
+    const handle = await mount()
+    expect(handle.isLoopback).toBe(false)
+    expect(handle.canAdminister).toBe(value === true)
   })
 
   it('reports non-loopback page authority through the connection handle', async () => {
