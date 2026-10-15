@@ -16,6 +16,7 @@ kind: "package-reference"
 - [使用本包](#use-this-package)
 - [浏览器认证与请求信任](#browser-authentication-and-request-trust)
 - [Connection generation](#connection-generation)
+- [远程管理显式启用](#remote-administration-opt-in)
 - [模型体验](#model-experience)
 - [已知限制与暂缓事项](#known-limitations-and-deferred-work)
 - [开发备注](#dev-note)
@@ -65,6 +66,14 @@ HTTPS cookie 名称与签名 audience 包含 `https:` scheme，因此即使 host
 
 
 <a id="model-experience"></a>
+<a id="remote-administration-opt-in"></a>
+
+## 远程管理显式启用
+
+默认情况下，非回环地址的浏览器页面隐藏 Host 管理控件。在启动 Host 前设置 `DSH_WEB_ALLOW_REMOTE_ADMIN=1`，或将 Connection 行的 `allowRemoteAdmin` 设置为 `true`，即可向远程页面开放持久化 Host 设置、配置文档操作及兼容的 Skills/Tools 设置扩展。环境变量只有字面值 `1` 才会启用此选项。修改后请重启 Host 并刷新已打开的页面。
+
+`ctx.connection.canAdminister` 和 `ctx.remote.$host.canAdminister` 表示此展示能力；`isLoopback` 仍描述实际页面的访问地址。此选项既不是身份验证机制，也不会新增逐方法授权层级：现有浏览器会话身份验证及 Host/Origin 检查仍然生效。`DSH_WEB_NO_AUTH=1` 是独立的身份验证旁路，单独设置不会启用远程管理。同时使用两个标志时，请将访问限制在私有 tailnet 等受信任的网络内。
+
 ## 模型体验
 
 无。协议消费层只在浏览器与主机之间搬运已经组合好的消息；这里没有任何内容进入模型请求。

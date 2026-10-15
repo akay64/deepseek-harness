@@ -96,6 +96,8 @@ export const inject = ['credentials']
 export interface ConnectionConfig {
   /** Browser recovery timing, injected into each served page. */
   recovery?: ConnectionRecoveryConfig
+  /** Expose Host administration controls to remote browsers. Authentication and Host/Origin checks still apply. */
+  allowRemoteAdmin?: boolean
   /**
    * Authorities this deployment serves beyond loopback: exact `host:port`, or
    * port-less `host` matching any port. The fence accepts loopback and the
@@ -111,6 +113,7 @@ export interface ConnectionConfig {
 
 export const Config: z<ConnectionConfig> = z.object({
   recovery: ConnectionRecoveryConfigSchema.default({}),
+  allowRemoteAdmin: z.boolean().default(false),
   trustedHosts: z.array(String).default([]),
   cookieMaxAgeDays: z.natural().min(1).default(30),
   maxRequestBodyBytes: z.natural().min(1).default(DEFAULT_MAX_REQUEST_BODY_BYTES),
@@ -125,6 +128,7 @@ export const Config: z<ConnectionConfig> = z.object({
  */
 export async function apply(ctx: Context, config?: ConnectionConfig): Promise<void> {
   const recovery = resolveConnectionConfig(config?.recovery)
+  const allowRemoteAdmin = config?.allowRemoteAdmin === true || process.env.DSH_WEB_ALLOW_REMOTE_ADMIN === '1'
   // The Loader resolves schema defaults; hand-built test contexts may pass none.
   const trustedHosts = config?.trustedHosts ?? []
   const cookieMaxAgeDays = config?.cookieMaxAgeDays ?? 30
@@ -142,6 +146,7 @@ export async function apply(ctx: Context, config?: ConnectionConfig): Promise<vo
     assertImageBodyCapacity(webCtx, maxRequestBodyBytes)
     webCtx.on('webserver/index-inject', (table) => {
       table.push({ kind: 'global', name: '__DSH_CONNECTION_RECOVERY__', value: recovery })
+      table.push({ kind: 'global', name: '__DSH_ALLOW_REMOTE_ADMIN__', value: allowRemoteAdmin })
     })
     const fetchHandler = connection.createSharedFetchHandler(API_PATH)
     const route: WebRoute = {

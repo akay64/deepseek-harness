@@ -27,6 +27,7 @@ function installConnection(ctx: Context, initialId: number | undefined): Generat
   const listeners = new Set<() => void>()
   const connection = {
     isLoopback: true,
+    canAdminister: true,
     generation: {
       getSnapshot: () => generation,
       subscribe(listener: () => void) {
