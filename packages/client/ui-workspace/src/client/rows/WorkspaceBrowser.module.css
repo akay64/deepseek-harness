@@ -78,7 +78,9 @@
   white-space: nowrap;
   line-height: 20px;
   opacity: 1;
-  visibility: visible;
+  /* Inherit, not visible: a hidden compact drawer must not be re-painted
+     through this base state by the search-collapse hide variants below. */
+  visibility: inherit;
   transition:
     max-width 180ms var(--ds-ease-in-out),
     margin-right 180ms var(--ds-ease-in-out),
@@ -123,7 +125,7 @@
   max-width: 60px;
   opacity: 1;
   overflow: hidden;
-  visibility: visible;
+  visibility: inherit;
   transition:
     max-width 180ms var(--ds-ease-in-out),
     opacity 120ms var(--ds-ease-in-out),
