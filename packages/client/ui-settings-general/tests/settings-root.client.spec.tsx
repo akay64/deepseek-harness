@@ -42,6 +42,7 @@ const useSessionStatus: SettingsRootComponentProps['useSessionStatus'] = selecto
 function mount({
   shortcuts = [],
   wide = true,
+  compact = false,
   dictionary = en,
   connectionState = 'connected',
   desktopUpdate = { failed: false, opening: false },
@@ -59,6 +60,7 @@ function mount({
 }: {
   shortcuts?: readonly ShortcutCatalogEntry[]
   wide?: boolean
+  compact?: boolean
   dictionary?: typeof en | typeof zh
   connectionState?: ConnectionSnapshot
   desktopUpdate?: DesktopUpdateView
@@ -74,6 +76,7 @@ function mount({
   const listeners = new Set<() => void>()
   const connectionListeners = new Set<() => void>()
   const reconnect = vi.fn()
+  const onOpened = vi.fn()
   const renderSlot = vi.fn(
     ((key: string, _owner: unknown, opts?: { only?: string; fallback?: import('react').ReactNode }) => {
       if (key === 'settings.section') return <div data-testid={`section-${opts?.only ?? 'all'}`} />
@@ -104,7 +107,7 @@ function mount({
     useSessionStatus,
     usePanelInfo, useSessionRetainInfo: () => undefined, useResource,
     useWorkspaces: unusedHook,
-    wide,
+    wide, compact, onOpen: onOpened,
     reconnect,
     openDesktopUpdate: () => {},
     useDesktopUpdate: select => select(desktopUpdate),
@@ -158,7 +161,12 @@ function mount({
     act(() => { sessions.byId[activeId] = { ...session, blank: next } })
     view.rerender(<SettingsRoot {...props} />)
   }
-  return { view, renderSlot, bump, listeners, reconnect, setConnectionState, setDesktopUpdate, setShortcuts, setOnboardingActive }
+  const setCompact = (next: boolean) => {
+    props.compact = next
+    view.rerender(<SettingsRoot {...props} />)
+  }
+  return { view, renderSlot, bump, listeners, reconnect, onOpened, setCompact,
+    setConnectionState, setDesktopUpdate, setShortcuts, setOnboardingActive }
 }
 
 function openPanel() {
@@ -527,4 +535,43 @@ it('passes current Settings key labels to the launcher and removes them when unb
 
   setShortcuts([{ ...row, keys: [], aria: undefined, binding: null, modified: true }])
   expect(launcher()).not.toHaveProperty('settingsShortcut')
+})
+
+describe('compact Settings', () => {
+  it('uses the registered section menu and keeps the selected content when widening', () => {
+    const b = mount({ compact: true })
+    openPanel()
+    expect(b.onOpened).toHaveBeenCalledOnce()
+    expect(screen.getByRole('dialog').hasAttribute('data-compact')).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: 'General' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Models' }))
+    const section = screen.getByTestId('section-models')
+    expect(screen.getByRole('button', { name: 'Models' })).toBeTruthy()
+    act(() => { b.setCompact(false) })
+    expect(screen.getByRole('dialog').hasAttribute('data-compact')).toBe(false)
+    expect(screen.getByTestId('section-models')).toBe(section)
+    expect(screen.getByRole('button', { name: 'General' })).toBeTruthy()
+  })
+})
+
+it('captures return focus after compact navigation releases its layer', () => {
+  const opener = document.createElement('button')
+  document.body.append(opener)
+  const b = mount({ compact: true })
+  b.onOpened.mockImplementation(() => { opener.focus() })
+  openPanel()
+  expect(screen.getByRole('dialog')).toBeTruthy()
+  fireEvent.keyDown(document, { key: 'Escape' })
+  expect(document.activeElement).toBe(opener)
+  opener.remove()
+})
+
+it('keeps one localized header seat when compact Settings has no sections', () => {
+  const b = mount({ compact: true, rows: [] })
+  openPanel()
+  // The compact empty state names the dialog through the single contributed header seat.
+  expect(screen.getByRole('dialog', { name: 'Settings Title' })).toBeTruthy()
+  expect(screen.queryByRole('button', { expanded: false })).toBeNull()
+  const headerSeats = b.renderSlot.mock.calls.filter(([key]) => key === 'settings.header')
+  expect(headerSeats.length).toBeGreaterThan(0)
 })

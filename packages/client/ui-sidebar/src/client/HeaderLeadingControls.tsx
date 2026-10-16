@@ -1,4 +1,5 @@
 /** Window-chrome controls for the fully hidden sidebar (frame shell.leading seat). */
+import clsx from 'clsx'
 import {
   IconNewChatOutlineRegular, IconPanelLeftOutlineRegular, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -16,10 +17,9 @@ export type HeaderLeadingControlsProps =
 
 /**
  * Sidebar-open and New Session controls in the frame's window-chrome seat.
- * On macOS desktop a collapsed sidebar hides entirely (no rail), taking both
- * controls off screen; this occupant puts them back beside the traffic
- * lights. The frame mounts the seat only in that state and owns its
- * placement, so the occupant renders unconditionally.
+ * The frame mounts this seat beside macOS traffic lights when its sidebar
+ * is hidden, and on every compact frame where navigation has no closed rail.
+ * Compact presentation shows only the reopen control; the frame owns placement.
  * @param props - Injected sidebar actions plus the sidebar locale seat.
  * @returns the two window-chrome controls.
  */
@@ -34,6 +34,7 @@ export function HeaderLeadingControls({ toggleSidebar, startSession, useShortcut
           className={css.iconButton}
           aria-label={t('toggle.open')}
           aria-keyshortcuts={shortcut?.aria}
+          onPointerDown={(event) => { if (event.pointerType === 'touch') event.currentTarget.focus({ preventScroll: true }) }}
           onClick={() => { toggleSidebar() }}
         >
           <IconPanelLeftOutlineRegular size={16} />
@@ -42,7 +43,7 @@ export function HeaderLeadingControls({ toggleSidebar, startSession, useShortcut
       <Tooltip label={t('session.new.label')} shortcutKeys={newShortcut?.keys} delayMs={500}>
         <button
           type="button"
-          className={css.iconButton}
+          className={clsx(css.iconButton, css.newSession)}
           aria-label={t('session.new.label')}
           aria-keyshortcuts={newShortcut?.aria}
           onClick={() => { startSession() }}

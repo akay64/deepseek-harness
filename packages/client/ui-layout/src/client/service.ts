@@ -41,6 +41,8 @@ export interface ILayout {
   beginNavigation(): AbortSignal
   /** Toggle the sidebar panel (closed ⟷ contract default width). */
   toggleSidebar(): void
+  /** Dismiss compact navigation without changing desktop sidebar preferences. */
+  dismissCompactSidebar(): void
   /**
    * Report the right panel's presentation without changing its expanded state.
    * @param track - whether the normal panel width reserves a grid track,
@@ -92,6 +94,11 @@ export class LayoutController implements ILayout {
   /** Toggle the sidebar panel (closed ⟷ contract default width). */
   toggleSidebar(): void {
     this.panels.toggleSidebar()
+  }
+
+  /** Dismiss compact navigation after a completed user navigation. */
+  dismissCompactSidebar(): void {
+    this.panels.dismissCompactSidebar()
   }
 
   /** Report the right panel's track and fullscreen presentation. */

@@ -24,6 +24,15 @@
   cursor: pointer;
 }
 
+:global([data-compact]) .iconButton {
+  width: 44px;
+  height: 44px;
+}
+
+:global([data-compact]) .newSession {
+  display: none;
+}
+
 .iconButton:hover {
   background: var(--dsw-alias-interactive-bg-hover);
 }

@@ -62,8 +62,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      * the seats it declares disappear with it. To add something to the
      * sidebar, register into one of those inner seats instead.
      *
-     * The occupant receives the frame's live column state (collapsed, width)
-     * and is expected to render the compact control rail while collapsed.
+     * The occupant receives live presentation (compact, collapsed, width).
+     * Compact navigation overlays the main panel and has no closed rail.
      */
     'sidebar': { kind: 'single'; scope: 'root'; owner: SidebarOwnerProps }
     /**
@@ -105,9 +105,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'shell.overlay': { kind: 'list'; scope: 'root' }
     /**
      * Window-chrome seat at the frame's top-left, over every main panel.
-     * Mounted only while the sidebar column is fully hidden (macOS desktop
-     * collapse; other platforms keep the rail), so the occupant can assume the
-     * frame edge is the window edge and the macOS traffic lights sit before it.
+     * Mounted on every compact frame and when macOS desktop hides its sidebar.
+     * Native titlebar controls retain their platform-owned clearance.
      * OCCUPIED by ui-sidebar's reopen/New Session controls.
      *
      * While the seat is mounted the frame publishes
@@ -127,9 +126,11 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 
 /** Sidebar owner share: live column state from the frame's concession solve. */
 export interface SidebarOwnerProps {
-  /** True when the sidebar is closed (the column renders the compact control rail). */
+  /** True when the sidebar covers the main panel rather than reserving a column. */
+  compact: boolean
+  /** True when navigation is closed; only noncompact presentations may retain a rail. */
   collapsed: boolean
-  /** Rendered column width in px (SIDEBAR_COLLAPSED when collapsed). */
+  /** Available navigation width in px: frame width when compact, resolved column otherwise. */
   width: number
 }
 

@@ -35,26 +35,29 @@ type AttentionSnapshot = Parameters<Parameters<SidebarRootComponentProps['useSes
 const noAttention: AttentionSnapshot = new Map()
 const useSessionStatus: SidebarRootComponentProps['useSessionStatus'] = selector => selector(noAttention)
 
-function mountShell({ collapsed = false, width = 300, shortcuts = [] }: {
+function mountShell({ compact = false, collapsed = false, width = 300, shortcuts = [] }: {
+  compact?: boolean
   collapsed?: boolean
   width?: number
   shortcuts?: readonly ShortcutCatalogEntry[]
 } = {}) {
   const startSession = vi.fn()
   const toggleSidebar = vi.fn()
+  const dismissCompactSidebar = vi.fn()
   let regionOwner: SidebarSectionOwnerProps | undefined
   let settingsOwner: SidebarSettingsOwnerProps | undefined
   let footerActionOwner: SidebarFooterActionOwnerProps | undefined
   const brandMark = <span data-testid="custom-brand-mark">M</span>
   const brandName = <span data-testid="custom-brand-name">Custom Brand</span>
-  let current = { collapsed, width }
+  let current = { compact, collapsed, width }
   const root = () => (
     <SidebarRoot
+      compact={current.compact}
       collapsed={current.collapsed} width={current.width}
       useSessions={neverHook} useSessionStatus={useSessionStatus} useSessionRetainInfo={neverHook}
       usePanelInfo={usePanelInfo} selectPanel={() => {}} usePanels={selector => selector([])} useShortcuts={selector => selector(shortcuts)}
       useResource={useResource} useWorkspaces={neverHook}
-      startSession={startSession} toggleSidebar={toggleSidebar} t={t}
+      startSession={startSession} toggleSidebar={toggleSidebar} dismissCompactSidebar={dismissCompactSidebar} t={t}
       renderSlot={((
         key: string,
         owner: SidebarFooterActionOwnerProps | SidebarSectionOwnerProps | SidebarSettingsOwnerProps,
@@ -63,6 +66,7 @@ function mountShell({ collapsed = false, width = 300, shortcuts = [] }: {
         if (key === 'sidebar.brand.name') return brandName
         if (key === 'sidebar.toggle.badge') return null
         if (key === 'sidebar.settings') {
+          if (!('compact' in owner)) throw new Error('expected Settings owner')
           settingsOwner = owner
           return <div data-testid="settings-seat" data-wide={owner.wide} />
         }
@@ -79,6 +83,7 @@ function mountShell({ collapsed = false, width = 300, shortcuts = [] }: {
   return {
     startSession,
     toggleSidebar,
+    dismissCompactSidebar,
     regionOwner: () => {
       if (regionOwner === undefined) throw new Error('region owner not rendered')
       return regionOwner
@@ -112,7 +117,7 @@ describe('SidebarRoot shell', () => {
     expect(screen.queryByRole('tooltip')).toBeNull()
     expect(Array.from(expanded.querySelectorAll('kbd'), key => key.textContent)).toEqual(['Ctrl', 'N'])
     cleanup()
-    render(<HeaderLeadingControls toggleSidebar={vi.fn()} startSession={vi.fn()} selectPanel={vi.fn()} t={t}
+    render(<HeaderLeadingControls toggleSidebar={vi.fn()} dismissCompactSidebar={vi.fn()} startSession={vi.fn()} selectPanel={vi.fn()} t={t}
       usePanelInfo={neverHook} useSessions={neverHook} useSessionStatus={neverHook}
       useSessionRetainInfo={neverHook} useResource={useResource} useWorkspaces={neverHook}
       usePanels={select => select([])} useShortcuts={select => select([shortcut])} />)
@@ -139,11 +144,12 @@ describe('SidebarRoot shell', () => {
     vi.stubEnv('DSH_CLIENT_GIT_DIRTY', 'true')
     vi.stubEnv('DSH_CLIENT_VERSION', '1.2.3-rc.4')
     const { container } = render(<SidebarRoot
+      compact={false}
       collapsed={false} width={300}
       useSessions={neverHook} useSessionStatus={useSessionStatus} useSessionRetainInfo={neverHook}
       usePanelInfo={usePanelInfo} selectPanel={() => {}} usePanels={selector => selector([])} useShortcuts={selector => selector([])}
       useResource={useResource} useWorkspaces={neverHook}
-      startSession={vi.fn()} toggleSidebar={vi.fn()} t={t}
+      startSession={vi.fn()} toggleSidebar={vi.fn()} dismissCompactSidebar={vi.fn()} t={t}
       renderSlot={((_key: string, _owner: unknown, options?: { fallback?: ReactNode }) =>
         options?.fallback ?? null) as SidebarRootComponentProps['renderSlot']}
     />)
@@ -159,11 +165,12 @@ describe('SidebarRoot shell', () => {
   ])('omits unavailable build-version suffixes from %j', (environment, expected) => {
     for (const [name, value] of Object.entries(environment)) vi.stubEnv(name, value)
     render(<SidebarRoot
+      compact={false}
       collapsed={false} width={300}
       useSessions={neverHook} useSessionStatus={useSessionStatus} useSessionRetainInfo={neverHook}
       usePanelInfo={usePanelInfo} selectPanel={() => {}} usePanels={selector => selector([])} useShortcuts={selector => selector([])}
       useResource={useResource} useWorkspaces={neverHook}
-      startSession={vi.fn()} toggleSidebar={vi.fn()} t={t}
+      startSession={vi.fn()} toggleSidebar={vi.fn()} dismissCompactSidebar={vi.fn()} t={t}
       renderSlot={((_key: string, _owner: unknown, options?: { fallback?: ReactNode }) =>
         options?.fallback ?? null) as SidebarRootComponentProps['renderSlot']}
     />)
@@ -174,11 +181,12 @@ describe('SidebarRoot shell', () => {
 
   it('retains the local-build fallback without complete build metadata', () => {
     render(<SidebarRoot
+      compact={false}
       collapsed={false} width={300}
       useSessions={neverHook} useSessionStatus={useSessionStatus} useSessionRetainInfo={neverHook}
       usePanelInfo={usePanelInfo} selectPanel={() => {}} usePanels={selector => selector([])} useShortcuts={selector => selector([])}
       useResource={useResource} useWorkspaces={neverHook}
-      startSession={vi.fn()} toggleSidebar={vi.fn()} t={t}
+      startSession={vi.fn()} toggleSidebar={vi.fn()} dismissCompactSidebar={vi.fn()} t={t}
       renderSlot={((_key: string, _owner: unknown, options?: { fallback?: ReactNode }) =>
         options?.fallback ?? null) as SidebarRootComponentProps['renderSlot']}
     />)
@@ -221,11 +229,12 @@ describe('SidebarRoot shell', () => {
   it('shows only the badge bubble while the rail badge is hovered inside the toggle', () => {
     vi.useFakeTimers()
     render(<SidebarRoot
+      compact={false}
       collapsed width={56}
       useSessions={neverHook} useSessionStatus={useSessionStatus} useSessionRetainInfo={neverHook}
       usePanelInfo={usePanelInfo} selectPanel={() => {}} usePanels={selector => selector([])} useShortcuts={selector => selector([])}
       useResource={useResource} useWorkspaces={neverHook}
-      startSession={vi.fn()} toggleSidebar={vi.fn()} t={t}
+      startSession={vi.fn()} toggleSidebar={vi.fn()} dismissCompactSidebar={vi.fn()} t={t}
       renderSlot={((key: string) => key === 'sidebar.toggle.badge'
         ? <Tooltip label="Update — V1.2.3"><span data-testid="badge" /></Tooltip>
         : null) as SidebarRootComponentProps['renderSlot']}
@@ -312,4 +321,43 @@ it('uses the same effective sidebar binding for hover/focus hints and ARIA', () 
   expect(toggle.getAttribute('aria-keyshortcuts')).toBe('Meta+B')
   fireEvent.focus(toggle)
   expect(Array.from(screen.getByRole('tooltip').querySelectorAll('kbd'), key => key.textContent)).toEqual(['⌘', 'B'])
+})
+
+describe('compact navigation focus', () => {
+  it('contains focus, dismisses on Escape, and restores its opener', () => {
+    const opener = document.createElement('button')
+    document.body.append(opener)
+    opener.focus()
+    const restore = vi.spyOn(opener, 'focus')
+    const b = mountShell({ compact: true })
+    const dialog = screen.getByRole('dialog', { name: 'Navigation' })
+    expect(dialog.getAttribute('aria-modal')).toBe('true')
+    const buttons = dialog.querySelectorAll('button')
+    const first = buttons[0]!
+    const last = buttons[buttons.length - 1]!
+    first.focus()
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true })
+    expect(document.activeElement).toBe(last)
+    fireEvent.keyDown(document, { key: 'Tab' })
+    expect(document.activeElement).toBe(first)
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(b.toggleSidebar).toHaveBeenCalledOnce()
+    b.rerender({ collapsed: true })
+    // The composed frame hides the old focused node. jsdom omits that CSS,
+    // so assert the return request here; browser coverage checks final focus.
+    expect(restore).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('dialog', { name: 'Navigation' })).toBeNull()
+    opener.remove()
+  })
+
+  it('dismisses compact navigation when its Settings occupant opens', () => {
+    const b = mountShell({ compact: true })
+    expect(b.settingsOwner().compact).toBe(true)
+    b.settingsOwner().onOpen()
+    expect(b.dismissCompactSidebar).toHaveBeenCalledOnce()
+    b.rerender({ collapsed: true })
+    b.settingsOwner().onOpen()
+    expect(b.dismissCompactSidebar).toHaveBeenCalledTimes(2)
+    expect(b.toggleSidebar).not.toHaveBeenCalled()
+  })
 })

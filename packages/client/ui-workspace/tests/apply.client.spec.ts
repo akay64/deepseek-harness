@@ -63,7 +63,7 @@ async function bench() {
   }))
   const rename = vi.fn(async () => ({}))
   const selectPanel = vi.fn()
-  ctx.provide('layout', { selectPanel, beginNavigation: () => new AbortController().signal })
+  ctx.provide('layout', { selectPanel, dismissCompactSidebar: vi.fn(), beginNavigation: () => new AbortController().signal })
   const search = vi.fn(async () => ({
     ok: true as const,
     value: { items: [{ sessionId: 'session' as never, snippet: 'match' }], hasMore: false },
@@ -593,10 +593,12 @@ describe('ui-workspace apply', () => {
     expect(b.fork).toHaveBeenCalledOnce()
     expect(b.retain).not.toHaveBeenCalled()
     expect(b.selectPanel).not.toHaveBeenCalled()
+    expect(b.ctx.layout.dismissCompactSidebar).not.toHaveBeenCalled()
     toast.dismissToast()
     toast.openForkSource(sid('source'))
     expect(b.retain).toHaveBeenCalledExactlyOnceWith('source', { source: 'mainView' })
     expect(b.selectPanel).toHaveBeenCalledExactlyOnceWith(null)
+    expect(b.ctx.layout.dismissCompactSidebar).toHaveBeenCalledOnce()
     expect(b.fork).toHaveBeenCalledOnce()
   })
 
@@ -685,6 +687,17 @@ describe('ui-workspace apply', () => {
     expect(b.fork).toHaveBeenCalledOnce()
     expect(b.retain).not.toHaveBeenCalled()
     expect(b.selectPanel).not.toHaveBeenCalled()
+    expect(b.ctx.layout.dismissCompactSidebar).not.toHaveBeenCalled()
+  })
+
+  it('dismisses compact navigation even when selecting the already-current Session', async () => {
+    const b = await bench()
+    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    b.ctx.uiWorkspace.openSession(sid('source'))
+    b.ctx.uiWorkspace.openSession(sid('source'))
+    expect(b.ctx.layout.dismissCompactSidebar).toHaveBeenCalledTimes(2)
+    expect(b.selectPanel).toHaveBeenNthCalledWith(1, null)
+    expect(b.selectPanel).toHaveBeenNthCalledWith(2, null)
   })
 
   it('routes browser actions and picker creation to the services', async () => {

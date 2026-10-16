@@ -43,7 +43,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     /**
      * The settings seat at the sidebar foot. Declared by this package's
      * 'sidebar' entry; ui-settings registers its trigger row + modal panel.
-     * The sidebar passes only its column state — it holds no settings state.
+     * The sidebar passes column presentation and a compact-dismiss callback;
+     * it holds no settings state.
      */
     'sidebar.settings': { kind: 'single'; scope: 'root'; owner: SidebarSettingsOwnerProps }
     /**
@@ -100,6 +101,10 @@ export interface SidebarSectionOwnerProps {
  * occupant's trigger row must render against (wide row vs rail icon).
  */
 export interface SidebarSettingsOwnerProps {
+  /** Settings adopts the frame's compact presentation, not an independent breakpoint. */
+  compact: boolean
+  /** Settings calls this when opened so its owner can dismiss compact navigation. */
+  onOpen: () => void
   /** Whether the sidebar renders wide content (false = 56px rail). */
   wide: boolean
 }
@@ -123,6 +128,8 @@ export type SidebarRootInjected = {
   startSession: (workspaceId?: WorkspaceId) => void
   /** Toggle the sidebar column through the layout service. */
   toggleSidebar: () => void
+  /** Dismiss compact navigation without changing a desktop sidebar preference. */
+  dismissCompactSidebar: () => void
   /** Select the global panel addressed by a sidebar row. */
   selectPanel: (id: MainPanelId) => void
   /** Private reactive sources bound to framework selector hooks. */

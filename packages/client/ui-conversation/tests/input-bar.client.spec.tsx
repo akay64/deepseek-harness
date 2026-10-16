@@ -1913,3 +1913,27 @@ it('places context usage below the composer and hides it until the activity clos
   expect(view.getByRole('dialog', { name: '上下文已用' })).toBeTruthy()
   expect(view.getByRole('button', { name: '发送消息' })).toBeTruthy()
 })
+
+describe('touch command-menu focus intent', () => {
+  it('opens from the saved selection without focusing the editor on a touch gesture', () => {
+    const toggleCommandMenu = vi.fn()
+    const { view, textarea, shell } = bench({ draft: 'draft text', toggleCommandMenu })
+    act(() => { shell.editor.update(() => { $selectDetectSpan({ start: 2, end: 7 }) }, { discrete: true }) })
+    const launcher = view.getByLabelText('添加文件或调用指令')
+    fireEvent.pointerDown(launcher, { pointerType: 'touch' })
+    fireEvent.click(launcher)
+    expect(document.activeElement).toBe(launcher)
+    expect(document.activeElement).not.toBe(textarea)
+    expect(toggleCommandMenu).toHaveBeenCalledExactlyOnceWith({ start: 2, end: 7 })
+  })
+
+  it('keeps keyboard activation focused on the editor after a touch activation', () => {
+    const { view, textarea } = bench()
+    const launcher = view.getByLabelText('添加文件或调用指令')
+    fireEvent.pointerDown(launcher, { pointerType: 'touch' })
+    fireEvent.click(launcher)
+    fireEvent.keyDown(launcher, { key: 'Enter' })
+    fireEvent.click(launcher)
+    expect(document.activeElement).toBe(textarea)
+  })
+})

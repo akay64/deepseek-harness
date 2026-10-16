@@ -14,8 +14,8 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from
 import { createPortal } from 'react-dom'
 import clsx from 'clsx'
 import {
-  ConnectionIndicator, Tooltip, useModalLayer,
-  IconAgentPresetOutlineMedium, IconArchiveOutlineMedium, IconCloseOutlineRegular, IconDataOutlineMedium,
+  ConnectionIndicator, Menu, Tooltip, useModalLayer,
+  IconAgentPresetOutlineMedium, IconArchiveOutlineMedium, IconChevronDownOutlineRegular, IconCloseOutlineRegular, IconDataOutlineMedium,
   IconPersonalizationOutlineMedium, IconSettingsOutlineMedium, IconUserOutlineMedium,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ConnectionIndicatorState } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -39,10 +39,12 @@ function navIcon(id: string) {
 }
 
 type PanelProps = {
+  compact: boolean
   rows: readonly SettingsSectionRow[]
   renderSlot: SettingsRootComponentProps['renderSlot']
   activeId: string | undefined
   onSelect: (id: string) => void
+  onOpen: () => void
   onClose: () => void
 }
 
@@ -51,14 +53,21 @@ type PanelProps = {
  * header button, a mask click, and document-level Escape (mounted only while
  * open, so the listener lifetime is the panel's).
  */
-function SettingsPanel({ rows, renderSlot, activeId, onSelect, onClose }: PanelProps) {
+function SettingsPanel({ compact, rows, renderSlot, activeId, onSelect, onOpen, onClose }: PanelProps) {
   // Entries can unmount underneath the requested id, so the render-time
   // projection falls back to the first row when the id is gone.
   const active = rows.find(r => r.id === activeId)?.id ?? rows[0]?.id
   const titleId = useId()
+  const [sectionsOpen, setSectionsOpen] = useState(false)
+  useEffect(() => { setSectionsOpen(false) }, [compact])
 
+  // Let compact navigation release its modal layer before this one captures
+  // return focus; its Settings trigger is hidden after navigation dismisses.
+  const [prepared, setPrepared] = useState(!compact)
+  useLayoutEffect(() => { onOpen(); setPrepared(true) }, [onOpen])
   const panel = useRef<HTMLDivElement>(null)
-  useModalLayer(panel, true, onClose)
+  useModalLayer(panel, prepared, onClose)
+  if (!prepared) return null
 
   // Portalled beside #root like the Modal primitive: a covering surface mounted
   // inside the root would precede the columns' chrome in document order, so a
@@ -67,8 +76,8 @@ function SettingsPanel({ rows, renderSlot, activeId, onSelect, onClose }: PanelP
   return createPortal((
     <div className={css.overlay} role="presentation">
       <div className={css.mask} aria-hidden="true" onClick={onClose} />
-      <div ref={panel} tabIndex={-1} data-shortcut-modal="settings" className={css.panel} role="dialog" aria-modal="true" aria-labelledby={titleId}>
-        <nav className={css.nav}>
+      <div ref={panel} tabIndex={-1} data-shortcut-modal="settings" className={css.panel} data-compact={compact || undefined} role="dialog" aria-modal="true" aria-labelledby={titleId}>
+        {!compact && <nav className={css.nav}>
           <div className={css.navTitle} id={titleId} tabIndex={-1}
             data-modal-autofocus={active === undefined ? '' : undefined}>{renderSlot('settings.header', {})}</div>
           <div className={css.navList}>
@@ -86,9 +95,30 @@ function SettingsPanel({ rows, renderSlot, activeId, onSelect, onClose }: PanelP
               </button>
             ))}
           </div>
-        </nav>
+        </nav>}
         <div className={css.content}>
           <div className={css.header}>
+            {compact && (
+              <>
+                <span className={active === undefined ? css.navTitle : css.hiddenLabel} id={titleId}
+                  tabIndex={active === undefined ? -1 : undefined} data-modal-autofocus={active === undefined ? '' : undefined}>{renderSlot('settings.header', {})}</span>
+                {active !== undefined && <Menu
+                  portal
+                  open={sectionsOpen}
+                  onClose={() => { setSectionsOpen(false) }}
+                  items={rows.map(row => ({ id: row.id, label: row.label, icon: navIcon(row.id) }))}
+                  selectedId={active}
+                  onSelect={(id) => { onSelect(id); setSectionsOpen(false) }}
+                  anchor={(
+                    <button type="button" className={css.sectionSelector} aria-haspopup="menu" aria-expanded={sectionsOpen}
+                      data-modal-autofocus onClick={() => { setSectionsOpen(value => !value) }}>
+                      {navIcon(active)}<span>{rows.find(row => row.id === active)?.label}</span>
+                      <IconChevronDownOutlineRegular className={css.navIcon} size={14} />
+                    </button>
+                  )}
+                />}
+              </>
+            )}
             <div className={css.actions}>{renderSlot('settings.action', {})}</div>
             <button type="button" className={css.close} onClick={onClose}>
               <IconCloseOutlineRegular size={14} />
@@ -111,7 +141,7 @@ function SettingsPanel({ rows, renderSlot, activeId, onSelect, onClose }: PanelP
  */
 export function SettingsRoot(props: SettingsRootComponentProps) {
   const {
-    wide, reconnect, useConnectionState, useSections, useOnboardingSteps, useSessions, renderSlot, t,
+    wide, compact, onOpen, reconnect, useConnectionState, useSections, useOnboardingSteps, useSessions, renderSlot, t,
     useDesktopUpdate, openDesktopUpdate, useStore, actions, useShortcuts,
   } = props
   const { open, activeId } = useStore(state => state)
@@ -245,10 +275,12 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
       </div>
       {open && (
         <SettingsPanel
+          compact={compact}
           rows={rows}
           renderSlot={renderSlot}
           activeId={activeId}
           onSelect={actions.select}
+          onOpen={onOpen}
           onClose={close}
         />
       )}

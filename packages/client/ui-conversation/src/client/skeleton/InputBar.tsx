@@ -291,13 +291,13 @@ export const InputBar = memo(function InputBar({
     if (document.activeElement !== editor.getRootElement()) focusDraftEditor(editor, revealSelection)
   }
 
+  const commandMenuTouch = useRef(false)
   const onToggleCommandMenu = (): void => {
     if (keyboard === undefined) return
-    // The menu is a combobox over the editor, so the keyboard has to be there
-    // before the launcher opens it: activating the button from the keyboard
-    // leaves focus on the button, and restoring it afterwards would re-track an
-    // empty draft and close the menu again.
-    if (editor !== null) focusDraftEditor(editor, revealSelection)
+    // Mouse/keyboard launch keeps the editor-owned combobox behavior. Touch
+    // browses from the non-editable trigger using the saved caret instead, so
+    // opening a menu does not request the software keyboard.
+    if (!commandMenuTouch.current && editor !== null) focusDraftEditor(editor, revealSelection)
     toggleCommandMenu?.(keyboard.caretSpan())
   }
 
@@ -446,7 +446,16 @@ export const InputBar = memo(function InputBar({
                 aria-haspopup="listbox"
                 aria-expanded={commandMenuOpen}
                 disabled={locked || toggleCommandMenu === undefined}
-                onMouseDown={keepFocus}
+                onPointerDown={(event) => {
+                  commandMenuTouch.current = event.pointerType === 'touch'
+                  if (commandMenuTouch.current) {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    event.currentTarget.focus({ preventScroll: true })
+                  }
+                }}
+                onKeyDown={() => { commandMenuTouch.current = false }}
+                onMouseDown={(event) => { if (!commandMenuTouch.current) keepFocus(event) }}
                 onClick={onToggleCommandMenu}
               >
                 <IconPlusOutlineMedium size={14} />

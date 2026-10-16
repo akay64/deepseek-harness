@@ -611,3 +611,30 @@
     animation: none;
   }
 }
+
+.compact {
+  padding-top: max(6px, env(safe-area-inset-top));
+  padding-bottom: max(6px, env(safe-area-inset-bottom));
+}
+
+.compact .toggle {
+  position: static;
+  width: 44px;
+  height: 44px;
+}
+
+.compact .newSession,
+.compact .panelRow {
+  min-height: 44px;
+}
+
+:global([data-windows-titlebar]) .compact.collapsed .toggle,
+:global([data-windows-titlebar]) .compact.collapsed .newSession {
+  display: none;
+}
+
+:global([data-windows-titlebar]) .compact:not(.collapsed) .toggle {
+  position: static;
+  width: 44px;
+  height: 44px;
+}

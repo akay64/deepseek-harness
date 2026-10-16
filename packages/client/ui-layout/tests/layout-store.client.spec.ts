@@ -290,3 +290,24 @@ describe('right panel instant geometry', () => {
     expect(store.getSnapshot().layoutInfo).toMatchObject({ rightbarShown: true, rightbarFullscreen: fullscreen, rightbarInstant: false })
   })
 })
+
+describe('compact navigation dismissal', () => {
+  it('is idempotent and preserves desktop preferences across both compact boundaries', () => {
+    const instance = createLayoutStore().create()
+    const { actions } = instance
+    actions.setSidebar(400)
+    actions.setViewportWidth(393)
+    actions.toggleSidebar()
+    actions.dismissCompactSidebar()
+    actions.dismissCompactSidebar()
+    expect(instance.getSnapshot().layoutInfo).toMatchObject({ sidebar: 400, narrowExpanded: false })
+    actions.toggleSidebar()
+    actions.setViewportWidth(768)
+    expect(instance.getSnapshot().layoutInfo.narrowExpanded).toBe(false)
+    actions.toggleSidebar()
+    actions.dismissCompactSidebar()
+    expect(instance.getSnapshot().layoutInfo.narrowExpanded).toBe(true)
+    actions.setViewportWidth(1920)
+    expect(instance.getSnapshot().layoutInfo).toMatchObject({ sidebar: 400, narrowExpanded: false })
+  })
+})

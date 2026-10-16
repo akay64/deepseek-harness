@@ -128,6 +128,7 @@
     "apps/web/tests/present-svg.e2e.ts",
     "apps/web/tests/composer-draft-scroll.e2e.ts",
     "apps/web/tests/composer-focus.e2e.ts",
+    "apps/web/tests/compact-navigation.e2e.ts",
     "apps/web/tests/composer-placeholder.e2e.ts",
     "apps/web/tests/context-meter.e2e.ts",
     "apps/web/tests/cordis-tool-round.e2e.ts",
