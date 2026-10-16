@@ -288,3 +288,39 @@
 .overlayLayer > * {
   pointer-events: auto;
 }
+
+/* Compact navigation covers the mounted main view without consuming its width. */
+.frame[data-compact] {
+  transition: none;
+}
+
+.frame[data-compact] .centerCol {
+  grid-area: 1 / 2 / 2 / 3;
+}
+
+.frame[data-compact] .rightbarCol {
+  grid-area: 1 / 3 / 2 / 4;
+}
+
+.frame[data-compact] .sidebarCol {
+  position: absolute;
+  inset: var(--dsh-frame-chrome-top, 0px) 0 0;
+  z-index: 50;
+  border: none;
+  background: var(--dsw-specific-sidebar-fill);
+}
+
+.frame[data-compact][data-sidebar-collapsed] .sidebarCol {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+:global(html:not([data-platform='darwin']):not([data-windows-titlebar])) .frame[data-compact] {
+  --dsh-frame-leading-clearance: 64px;
+  --dsh-frame-top-clearance: 24px;
+}
+
+:global(html:not([data-platform='darwin'])) .frame[data-compact] .leadingSeat {
+  top: calc(var(--dsh-frame-chrome-top, 0px) + 4px);
+  left: 8px;
+}

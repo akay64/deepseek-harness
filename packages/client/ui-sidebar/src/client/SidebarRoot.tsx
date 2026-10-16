@@ -19,7 +19,8 @@
 import { useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
 import {
-  FishLogo, IconNewChatOutlineMedium, IconNewChatOutlineRegular, IconPanelLeftOutlineRegular, isDarwinDesktop, ShortcutKeys, Tooltip,
+  FishLogo, useModalLayer, IconNewChatOutlineMedium, IconNewChatOutlineRegular,
+  IconPanelLeftOutlineRegular, isDarwinDesktop, ShortcutKeys, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsRenderSlots, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {
@@ -86,10 +87,12 @@ function PanelRow({ id, label, wide, usePanelInfo, selectPanel, renderSlot }: Pa
  * @returns the sidebar element tree.
  */
 export function SidebarRoot({
+  compact,
   collapsed,
   width,
   startSession,
   toggleSidebar,
+  dismissCompactSidebar,
   selectPanel,
   usePanels,
   useShortcuts,
@@ -131,6 +134,7 @@ export function SidebarRoot({
   // leaves. A pointer that returns within that window cancels the pending
   // hide rather than restarting from a hidden bar.
   const column = useRef<HTMLDivElement>(null)
+  useModalLayer(column, compact && !collapsed, toggleSidebar)
   const [pointerInside, setPointerInside] = useState(false)
   const lingerTimer = useRef<number | undefined>(undefined)
   const armLinger = (): void => {
@@ -199,8 +203,11 @@ export function SidebarRoot({
   return (
     <div
       ref={column}
+      role={compact && !collapsed ? 'dialog' : undefined}
+      aria-modal={compact && !collapsed || undefined}
+      aria-label={compact && !collapsed ? t('navigation.label') : undefined}
       className={clsx(
-        css.root, !wide && css.collapsed, !wide && everWide.current && css.railIn,
+        css.root, compact && css.compact, !wide && css.collapsed, !wide && everWide.current && css.railIn,
         collapsed && wide && css.fading, !pointerInside && css.quietBars,
       )}
       style={wide ? { width: collapsed ? lastWideWidth.current : width } : undefined}
@@ -307,7 +314,7 @@ export function SidebarRoot({
           {renderSlot('sidebar.footer.action', { wide })}
         </div>
         <div className={css.settingsArea}>
-          {renderSlot('sidebar.settings', { wide })}
+          {renderSlot('sidebar.settings', { wide, compact, onOpen: dismissCompactSidebar })}
         </div>
       </div>
     </div>

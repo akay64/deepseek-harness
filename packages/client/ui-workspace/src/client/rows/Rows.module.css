@@ -419,3 +419,28 @@
     transition: none;
   }
 }
+
+:global([data-compact]) .projectRow,
+:global([data-compact]) .sessionRow {
+  height: auto;
+  min-height: 44px;
+  flex-wrap: wrap;
+}
+
+:global([data-compact]) .rowActions {
+  display: inline-flex;
+  height: auto;
+  max-width: 100%;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+:global([data-compact]) .rowActions button {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+:global([data-compact]) .sessionRow:has(.rowActions) .time,
+:global([data-compact]) .sessionRow:has(.rowActions) .pinIndicator {
+  display: none;
+}

@@ -8,7 +8,7 @@ function fakePanels(): PanelActions {
     selectPanel: vi.fn(),
     retainMainPanels: vi.fn(),
     setSidebar: vi.fn(),
-    toggleSidebar: vi.fn(),
+    toggleSidebar: vi.fn(), dismissCompactSidebar: vi.fn(),
     setViewportWidth: vi.fn(),
     setRightbar: vi.fn(),
     openRightbar: vi.fn(),
@@ -102,4 +102,12 @@ describe('LayoutController', () => {
     expect(pending.aborted).toBe(true)
     service.dispose()
   })
+})
+
+it('forwards idempotent compact navigation dismissal to its store', () => {
+  const panels = fakePanels()
+  const service = new LayoutController(panels, () => true, createSnapshotStore({ activePanelId: null }))
+  service.dismissCompactSidebar()
+  expect(panels.dismissCompactSidebar).toHaveBeenCalledOnce()
+  expect(panels.toggleSidebar).not.toHaveBeenCalled()
 })

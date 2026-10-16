@@ -246,3 +246,70 @@
    ui-web base.css's `body > :not(#root)` subtraction covers it wherever it
    overlaps a chrome row's drag — including above every column, which an in-root
    overlay could not promise once a chrome row declares drag itself. */
+
+/* Same section seat and state; only the compact frame/navigation change. */
+.panel[data-compact] {
+  width: 100vw;
+  max-width: none;
+  height: calc(100dvh - var(--dsh-frame-chrome-top, 0px));
+  border-radius: 0;
+  margin-top: var(--dsh-frame-chrome-top, 0px);
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.panel[data-compact] .header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  height: auto;
+  min-height: 60px;
+  align-items: center;
+  padding: 8px 12px;
+}
+
+.panel[data-compact] .header > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.panel[data-compact] .actions {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  flex-wrap: wrap;
+}
+
+.panel[data-compact] .actions:empty {
+  display: none;
+}
+
+.panel[data-compact] .actions > * {
+  max-width: 100%;
+}
+
+.panel[data-compact] .close {
+  grid-column: 2;
+  grid-row: 1;
+  width: 44px;
+  height: 44px;
+}
+
+.sectionSelector {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  max-width: 100%;
+  padding: 0 8px;
+  border: none;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.sectionSelector span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -67,9 +67,11 @@ export function apply(ctx: ClientContext): void {
     // (current Session Workspace, then recent Workspace).
     startSession: (workspaceId) => { workspaceNavigation.startSession(workspaceId) },
     toggleSidebar: () => { ctx.layout.toggleSidebar() },
+    dismissCompactSidebar: () => { ctx.layout.dismissCompactSidebar() },
     selectPanel: (id) => {
       if (id === 'plugins' || id === 'schedules') ctx.get('productAnalytics')?.track('sidebar_menu_click', { menu_name: id === 'plugins' ? 'plugin' : 'cron' })
       ctx.layout.selectPanel(id)
+      ctx.layout.dismissCompactSidebar()
     },
     hooks: { panels, shortcuts: ctx.shortcuts.catalog },
   })
@@ -87,10 +89,8 @@ export function apply(ctx: ClientContext): void {
     },
     inject: injectProps,
   }, SidebarRoot))
-  // macOS desktop hides the collapsed sidebar entirely, so the open/New
-  // Session controls move into the frame's window-chrome seat beside the
-  // traffic lights; the occupant reuses the shell's injected actions, and
-  // the AppFrame mounts the seat only while the column is fully hidden.
+  // Hidden macOS sidebars and compact frames use the same leading controls.
+  // AppFrame owns their placement; the occupant shares the sidebar actions.
   ctx.slots.inject('shell.leading', () => ctx.slots.register({
     name: 'shell.leading',
     locale: NS,

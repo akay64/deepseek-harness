@@ -344,6 +344,7 @@ class UiWorkspaceService extends Service implements UiWorkspace {
         return
       }
       this.clearMain()
+      this.ctx.layout.dismissCompactSidebar()
       return
     }
     const opening = draftOptions === undefined
@@ -531,7 +532,10 @@ class UiWorkspaceService extends Service implements UiWorkspace {
     const previous = this.mainReference
     this.mainReference = reference
     previous?.release()
-    if (panel === 'reveal') this.ctx.layout.selectPanel(null)
+    if (panel === 'reveal') {
+      this.ctx.layout.selectPanel(null)
+      this.ctx.layout.dismissCompactSidebar()
+    }
   }
 
 }
