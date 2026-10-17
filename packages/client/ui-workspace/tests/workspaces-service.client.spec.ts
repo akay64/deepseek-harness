@@ -704,7 +704,7 @@ describe('UiWorkspaceService', () => {
         summary('archived', { blank: true, cwd: '/w/a' }),
         summary('foreign', { blank: true, cwd: '/w/a' }),
         summary('started', { cwd: '/w/a' }),
-        summary('draft', { blank: true, cwd: '/w/a' }),
+        summary('draft', { blank: true, cwd: '/w/a', projectionValues: { agentPreset: 'ptc' } }),
       ], 'pending'),
       workspaces: workspaceState([
         workspace('a', [sid('empty'), sid('archived'), sid('started'), sid('draft')]),
@@ -714,7 +714,7 @@ describe('UiWorkspaceService', () => {
     b.uiWorkspace.openSession(sid('started'))
     b.uiWorkspace.startSession()
     await vi.waitFor(() => {
-      expect(b.sessions.create).toHaveBeenCalledExactlyOnceWith({ workspaceId: wid('a'), sessionId: sid('draft') })
+      expect(b.sessions.create).toHaveBeenCalledExactlyOnceWith({ workspaceId: wid('a'), sessionId: sid('draft'), agentPreset: 'ptc' })
       expect(b.sessions.retain).toHaveBeenLastCalledWith(sid('draft'), { source: 'mainView' })
     })
     expect(b.hasDraft.mock.calls).toEqual([[sid('empty')], [sid('draft')]])

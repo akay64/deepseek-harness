@@ -171,6 +171,7 @@ describe('BrowserAuth', () => {
     expect(auth.authorizeIndex(request('/index.html', '127.0.0.1:3082'), res.value)).toBe(true)
     expect(res.state).toEqual({})
     expect(auth.isAuthenticated({ headers: {} })).toBe(true)
+    expect(auth.authenticateApi({ headers: {} })).toBeUndefined()
   })
 
   it('mints one process token and a persistent authority-bound cookie', async () => {
