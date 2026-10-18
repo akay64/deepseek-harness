@@ -16,11 +16,13 @@ import type {
   RequestErrorAction,
 } from '@deepseek-ai/dsh-agent'
 import { agentEvents, assembleContextFor } from '@deepseek-ai/dsh-agent'
-import type { GenerateOptions, LlmCallConfig, Message, PreparedLlmCall } from '@deepseek-ai/dsh-llm'
+import type { ContextFormed, GenerateOptions, LlmCallConfig, Message, PreparedLlmCall } from '@deepseek-ai/dsh-llm'
 import {
   LlmError,
+  boundContextSummary,
   createAssistantMessage,
   createDeveloperMessage,
+  createUserMessage,
   errorChain,
   markAgentLoopRequest,
 } from '@deepseek-ai/dsh-llm'
@@ -32,12 +34,22 @@ import { canonicalHeader, headerEquals, ToolCallRecovery } from '@deepseek-ai/ds
 import { joinContextSections, renderContextSections, renderPrompt } from '@deepseek-ai/dsh-system-prompt'
 import type { PromptAssembly } from '@deepseek-ai/dsh-system-prompt'
 import type {} from '@deepseek-ai/dsh-session-projection'
+import { ptcRoutingDenial } from '@deepseek-ai/dsh-tools'
 import type { Context } from '@deepseek-ai/cordis'
 import { ReactLoopInbox } from './inbox.ts'
 import { RuntimeContextProjection } from './runtime-context.ts'
 import { AssistantStreamAttempt } from './assistant-stream.ts'
 import { SystemPromptProjection } from './runtime-context.ts'
 import { executeToolCalls } from './tool-calls.ts'
+
+declare module '@deepseek-ai/dsh-llm' {
+  interface MessageSourceMap {
+    'tool-routing': { kind: 'tool-routing' } & ContextFormed
+  }
+}
+
+/** Producer of the routing denial injected back to the model after a stream rejection. */
+const ROUTING_SOURCE = 'tool-routing'
 
 type Phase =
   | { kind: 'idle'; lastTurn: number }
@@ -115,6 +127,8 @@ export class ReactLoopAgent implements Agent {
   /** Process-local revision of assistant frames for this attached Session. */
   private assistantStreamRevision = 0
   private assistantAttemptCounter = 0
+  /** Routing rejections owned by the turn that raised them; a second one ends the turn. */
+  private routingRejections: { turn: number; names: string[] } | undefined
   private readonly systemPrompt: SystemPromptProjection
   /** Identities fully frozen by this loop; weak references do not retain replaced history. */
   private readonly frozenMessages = new WeakSet<Message>()
@@ -439,7 +453,23 @@ export class ReactLoopAgent implements Agent {
         this.session.append('user/message', context, { surfaceOp: 'append' })
       }
       firstAttempt = false
-      const request = this.buildRequest(config, preparedCall, assembly.tools, { turn, step }, startsRequestSeries, signal)
+      // A tool name this request never offered can only ever be denied: the wire
+      // schema list is what the model was shown, and under ptc presentation it is
+      // exactly the transport tool, so any other name is collapsed at dispatch
+      // regardless of registration. Cut the stream at the name instead of
+      // generating, storing, rendering, and re-sending arguments that can only
+      // produce that denial. `collapses()` stays the backstop for providers that
+      // withhold the name until the arguments arrive.
+      const offeredToolNames = new Set(assembly.tools.map(tool => tool.name))
+      let rejectedCall: { name: string; index: number } | undefined
+      // Cancellation is per attempt, never the loop signal: a routing rejection
+      // ends one request, a user cancellation ends the run. The loop signal still
+      // drives this controller, so adapters keep their settle-promptly contract.
+      const attemptAbort = new AbortController()
+      const relayAbort = (): void => { attemptAbort.abort(signal.reason) }
+      const request = this.buildRequest(config, preparedCall, assembly.tools, { turn, step }, startsRequestSeries, attemptAbort.signal)
+      if (signal.aborted) relayAbort()
+      else signal.addEventListener('abort', relayAbort, { once: true })
       const live = new AssistantStreamAttempt(
         this.session.id,
         ++this.assistantAttemptCounter,
@@ -456,36 +486,23 @@ export class ReactLoopAgent implements Agent {
         started = true
         for await (const chunk of stream) {
           signal.throwIfAborted()
+          if (rejectedCall === undefined
+            && chunk.type === 'tool-call-delta'
+            && chunk.name !== undefined
+            && !offeredToolNames.has(chunk.name)) {
+            rejectedCall = { name: chunk.name, index: chunk.index }
+            attemptAbort.abort()
+          }
+          // Every chunk that actually arrived is still pushed, so assembly, live
+          // frames, and the compact durable stream stay faithful to the wire.
           live.push(chunk)
         }
         signal.throwIfAborted()
       } catch (error: unknown) {
         if (!started) throw error
         try {
-          if (signal.aborted) {
-            const content = live.interruptedBlocks()
-            if (content.length > 0) {
-              live.settle('assistant/message', () => this.session.append('assistant/message', {
-                turn,
-                step,
-                message: createAssistantMessage({
-                  content,
-                  source: {
-                    provider: request.provider,
-                    model: request.model,
-                    ...live.replayState === undefined ? {} : { replayState: live.replayState },
-                  },
-                }),
-                interrupted: true,
-                ...live.usage === undefined ? {} : { usage: live.usage },
-                stream: live.stream,
-              }, { surfaceOp: 'append' }).seq)
-            } else {
-              live.settle(
-                'assistant/attempt',
-                () => this.session.append('assistant/attempt', { turn, step, stream: live.stream }).seq,
-              )
-            }
+          if (signal.aborted || rejectedCall !== undefined) {
+            this.settleInterruptedAttempt(live, request, turn, step)
           } else {
             live.settle(
               'assistant/attempt',
@@ -499,7 +516,39 @@ export class ReactLoopAgent implements Agent {
             { cause: error },
           )
         }
-        throw error
+        // A routing rejection is not a transport failure: it is settled above and
+        // answered below, and must never reach the request-error waterfall or a
+        // retry. Only the adapter's own failure keeps the established throw path.
+        if (rejectedCall === undefined) throw error
+      } finally {
+        signal.removeEventListener('abort', relayAbort)
+      }
+      if (rejectedCall !== undefined) {
+        // A stream that ended cleanly on the abort still needs its settlement.
+        if (!live.ended) this.settleInterruptedAttempt(live, request, turn, step)
+        if (this.routingRejections?.turn !== turn) this.routingRejections = { turn, names: [] }
+        const ledger = this.routingRejections
+        ledger.names.push(rejectedCall.name)
+        const denial = ptcRoutingDenial(rejectedCall.name)
+        // The same text a collapsed call gets at dispatch, so either path teaches
+        // one rule: reach a tool from inside the transport tool's program.
+        this.session.append('user/message', createUserMessage({
+          content: [{
+            type: 'text',
+            text: `${denial.message}. The stream was cut when the name arrived, before its arguments were generated, so nothing was dispatched.`,
+          }],
+          source: {
+            kind: ROUTING_SOURCE,
+            form: 'notice',
+            summary: boundContextSummary(`rejected direct call to ${rejectedCall.name}`),
+          },
+        }), { surfaceOp: 'append' })
+        if (ledger.names.length >= 2) {
+          throw new Error(
+            `${denial.message} - rejected again in turn ${turn} (${ledger.names.map(name => `"${name}"`).join(', ')}); ending the turn instead of repeating the request`,
+          )
+        }
+        continue
       }
       try {
         const finish = live.finish
@@ -610,6 +659,44 @@ export class ReactLoopAgent implements Agent {
     }
     signal.throwIfAborted()
     return { config, ...preparedCall === undefined ? {} : { preparedCall } }
+  }
+
+  /**
+   * Durable settlement for an attempt whose stream ended before dispatch: the
+   * safe visible prefix as an interrupted assistant message, or an attempt-only
+   * record when nothing but the call itself streamed. Either way the exact
+   * compact stream is attached, so every chunk that arrived stays in the log and
+   * no tool call is kept that would need a fabricated result.
+   */
+  private settleInterruptedAttempt(
+    live: AssistantStreamAttempt,
+    request: GenerateOptions,
+    turn: number,
+    step: number,
+  ): void {
+    const content = live.interruptedBlocks()
+    if (content.length > 0) {
+      live.settle('assistant/message', () => this.session.append('assistant/message', {
+        turn,
+        step,
+        message: createAssistantMessage({
+          content,
+          source: {
+            provider: request.provider,
+            model: request.model,
+            ...live.replayState === undefined ? {} : { replayState: live.replayState },
+          },
+        }),
+        interrupted: true,
+        ...live.usage === undefined ? {} : { usage: live.usage },
+        stream: live.stream,
+      }, { surfaceOp: 'append' }).seq)
+      return
+    }
+    live.settle(
+      'assistant/attempt',
+      () => this.session.append('assistant/attempt', { turn, step, stream: live.stream }).seq,
+    )
   }
 
   /** Log the resolved envelope and derive a frozen request from the admitted surface. */

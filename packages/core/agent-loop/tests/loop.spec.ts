@@ -1677,6 +1677,12 @@ describe('agent loop', () => {
       },
     ], textResponse('continued')])
     const ctx = await harness(adapter)
+    // The called tool must be offered to this request: an unoffered name is now
+    // rejected at the stream, which would bypass what this test is about.
+    ctx.tools.register(defineContentToolFixture({
+      name: 'echo', description: 'echo', parameters: {},
+      async execute() { return [{ type: 'text', text: 'echoed' }] },
+    }))
     const agent = await ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
 
     send(agent, 'go')

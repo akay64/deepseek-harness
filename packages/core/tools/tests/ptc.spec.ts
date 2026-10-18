@@ -10,7 +10,7 @@ import type { Scope } from '@deepseek-ai/dsh-scope'
 import SystemPrompt, { renderPrompt } from '@deepseek-ai/dsh-system-prompt'
 import { PtcRuntime } from '@deepseek-ai/dsh-ptc-runtime'
 import type { PtcRunRequest, PtcRunResult } from '@deepseek-ai/dsh-ptc-runtime'
-import ToolRuntime, { CodeRunFailedError, RUN_CODE_NAME, TOOL_ABORTED_BEFORE_DISPATCH, defineContentToolFixture, defineTool } from '@deepseek-ai/dsh-tools'
+import ToolRuntime, { CodeRunFailedError, RUN_CODE_NAME, TOOL_ABORTED_BEFORE_DISPATCH, defineContentToolFixture, defineTool, ptcRoutingDenial } from '@deepseek-ai/dsh-tools'
 import type { Config, JsonSchemaNode, PostToolDecision, ToolExecutionResult } from '@deepseek-ai/dsh-tools'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import SessionStore, { Session, SessionId } from '@deepseek-ai/dsh-session'
@@ -2032,6 +2032,9 @@ describe('the run_code dispatch bridge', () => {
     expect(result.error?.message).toBe(
       `unknown tool "write": only \`${RUN_CODE_NAME}\` is callable directly — call \`write\` from inside a \`${RUN_CODE_NAME}\` program instead`,
     )
+    // The stream-level rejection in the agent loop renders this same text from
+    // the same helper, so neither path can drift from the other.
+    expect(ptcRoutingDenial('write').message).toBe(result.error?.message)
   })
 
   it('routes a pre-aborted collapsed call through ABORTED_BEFORE_DISPATCH', async () => {

@@ -526,6 +526,24 @@ export class ToolNotFoundError extends HarnessError {
   }
 }
 
+/**
+ * The route an unreachable model-direct call must take instead. Owned here so
+ * the dispatch-time denial below and the agent loop’s stream-level rejection of
+ * an unoffered tool name render identical guidance rather than drifting copies.
+ */
+export function ptcRoutingRoute(toolName: string): string {
+  return `only \`${RUN_CODE_NAME}\` is callable directly — call \`${toolName}\` from inside a \`${RUN_CODE_NAME}\` program instead`
+}
+
+/**
+ * The denial one unreachable model-direct call receives, from either path:
+ * {@link ToolRuntime} preparing a collapsed call, or the agent loop cutting a
+ * stream that named a tool this request never offered.
+ */
+export function ptcRoutingDenial(toolName: string): ToolNotFoundError {
+  return new ToolNotFoundError(toolName, ptcRoutingRoute(toolName))
+}
+
 /** Thrown when a tool body or post-policy value violates its declared output. */
 export class ToolOutputError extends HarnessError {
   /** Schema/value violations in validation order. */
@@ -1474,10 +1492,7 @@ export class ToolRuntime extends Service {
         return {
           kind: 'final-result',
           exec: execution,
-          result: toolErrorResult(new ToolNotFoundError(
-            name,
-            `only \`${RUN_CODE_NAME}\` is callable directly — call \`${name}\` from inside a \`${RUN_CODE_NAME}\` program instead`,
-          )),
+          result: toolErrorResult(ptcRoutingDenial(name)),
         }
       }
       return { kind: 'ready', exec: execution }

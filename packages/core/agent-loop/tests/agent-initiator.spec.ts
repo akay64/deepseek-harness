@@ -196,7 +196,11 @@ describe('AgentLoop initiator scope', () => {
     await firstIdle
     const firstSignal = signals[0]
     expect(firstSignal).toBeDefined()
-    expect(new Set([...signals, ...adapter.requests.slice(0, 2).map(request => request.signal!)])).toEqual(new Set([firstSignal]))
+    // Every boundary still shares the turn's signal. Each request carries its own
+    // attempt signal that relays that one, so a single stream can be cut without
+    // ending the run (see the routing rejection in tool-routing.spec.ts).
+    expect(new Set([...signals])).toEqual(new Set([firstSignal]))
+    expect(new Set(adapter.requests.slice(0, 2).map(request => request.signal!)).size).toBe(2)
     expect(preStepSignals).toHaveLength(2)
     expect(new Set(preStepSignals)).toEqual(new Set([firstSignal]))
 
@@ -207,7 +211,9 @@ describe('AgentLoop initiator scope', () => {
     await secondIdle
     const secondSignal = signals[0]
     expect(secondSignal).toBeDefined()
-    expect(new Set([...signals, adapter.requests[2]!.signal!])).toEqual(new Set([secondSignal]))
+    // Boundaries share the turn's signal; the request carries its own attempt signal.
+    expect(new Set([...signals])).toEqual(new Set([secondSignal]))
+    expect(adapter.requests[2]?.signal).not.toBe(secondSignal)
     expect(preStepSignals).toHaveLength(1)
     expect(preStepSignals[0]).toBe(secondSignal)
     expect(secondSignal).not.toBe(firstSignal)
