@@ -706,6 +706,12 @@ describe('Agent.cancel()', () => {
       ],
     }])
     const ctx = await harness(adapter)
+    // The called tool must be OFFERED to this request: an unoffered name is now
+    // rejected at the stream, which would bypass what this test is about.
+    ctx.tools.register(defineContentToolFixture({
+      name: 'read', description: 'read', parameters: {},
+      async execute() { return [{ type: 'text', text: 'read' }] },
+    }))
     const agent = await ctx.agentLoop.create(SessionId('tool-call-drop'), { provider: 'mock', model: 'mock' })
 
     send(agent, 'go')
@@ -814,6 +820,12 @@ describe('Agent.cancel()', () => {
       ],
     }])
     const ctx = await harness(adapter)
+    // The called tool must be OFFERED to this request: an unoffered name is now
+    // rejected at the stream, which would bypass what this test is about.
+    ctx.tools.register(defineContentToolFixture({
+      name: 'read', description: 'read', parameters: {},
+      async execute() { return [{ type: 'text', text: 'read' }] },
+    }))
     const agent = await ctx.agentLoop.create(SessionId('nothing-to-finalize'), { provider: 'mock', model: 'mock' })
 
     send(agent, 'go')
