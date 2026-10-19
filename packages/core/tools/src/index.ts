@@ -940,7 +940,7 @@ export class ToolRuntime extends Service {
    * @param scope - the calling agent, or undefined for the global view.
    * @returns the resolved presentation mode.
    */
-  private modeFor(scope?: ScopeKey): ToolPresentationMode {
+  modeFor(scope?: ScopeKey): ToolPresentationMode {
     // Nearest scope wins along the chain: a preset's standing declaration
     // covers every agent parented under it, and an agent's own (were one ever
     // declared) would override its preset's. The mode decides what the model

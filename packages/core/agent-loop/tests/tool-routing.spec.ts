@@ -1,5 +1,5 @@
 /**
- * Stream-level rejection of a tool call whose name this request never offered.
+ * PTC-only stream rejection; native calls retain normal dispatch semantics.
  * The pump stops at the name, the attempt settles as interrupted, the model is
  * handed the route it must take instead, and the loop re-enters rather than
  * ending the turn.
@@ -16,15 +16,33 @@ import ToolRuntime, { defineContentToolFixture } from '@deepseek-ai/dsh-tools'
 import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
-import { MockAdapter, textResponse } from './mock-adapter.ts'
+import { PtcRuntime } from '@deepseek-ai/dsh-ptc-runtime'
+import type { PtcRunRequest, PtcRunResult, PtcRunSpec } from '@deepseek-ai/dsh-ptc-runtime'
+import type { ToolPresentationMode } from '@deepseek-ai/dsh-tools'
+import { MockAdapter, textResponse, toolCallResponse } from './mock-adapter.ts'
 
-async function harness(adapter: MockAdapter): Promise<Context> {
+/** Supplies PTC schemas; these tests never execute a transport program. */
+class FakePtcRuntime extends PtcRuntime {
+  readonly language = 'typescript'
+  readonly isolation = 'fake'
+
+  resolve(request: PtcRunRequest): PtcRunSpec {
+    return { ...request, cwd: request.cwd ?? process.cwd(), timeoutMs: request.timeoutMs ?? 120_000 }
+  }
+
+  async run(_request: PtcRunRequest): Promise<PtcRunResult> {
+    return { logs: [] }
+  }
+}
+
+async function harness(adapter: MockAdapter, mode: ToolPresentationMode = 'ptc'): Promise<Context> {
   const ctx = new Context()
   await ctx.plugin(LlmRuntime)
   await ctx.plugin(SessionStore)
   await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(SystemPrompt, { personaPrefix: '' })
-  await ctx.plugin(ToolRuntime)
+  await ctx.plugin(ToolRuntime, { mode })
+  await ctx.plugin(FakePtcRuntime)
   await ctx.plugin(AgentRegistry)
   await ctx.plugin(AgentLoop, { agents: [] })
   ctx.llm.registerAdapter(['mock'], adapter)
@@ -152,4 +170,64 @@ describe('stream-level rejection of an unoffered tool name', () => {
     }
     expect(ended).toBe('error')
   }, 15_000)
+})
+
+describe('native-mode compatibility', () => {
+  it.each(['native', 'ptc'] as const)('keeps unknown-tool dispatch native under a %s deployment', async (mode) => {
+    const adapter = new MockAdapter([callTo('web_search', 'NATIVE-TAIL'), textResponse('done')])
+    const ctx = await harness(adapter, mode)
+    const agent = await ctx.agentLoop.create(SessionId(`native-${mode}`), { provider: 'mock', model: 'mock' })
+    if (mode === 'ptc') agent.ctx.tools.presentAs('native')
+    agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
+    await waitForIdle(ctx, agent)
+
+    const events = agent.session.snapshotEvents()
+    expect(events.some(event => event.type === 'tool/call' && event.data.name === 'web_search')).toBe(true)
+    expect(events.find(event => event.type === 'tool/result')).toMatchObject({
+      data: { error: { name: 'ToolNotFoundError', code: 'UNKNOWN_TOOL' }, message: { isError: true } },
+    })
+    expect(events.some(event => event.type === 'user/message' && event.data.source.kind === 'tool-routing')).toBe(false)
+    expect(events.some(event => event.type === 'assistant/message' && event.data.interrupted)).toBe(false)
+    expect(JSON.stringify(events)).toContain('NATIVE-TAIL')
+    expect(requestText(adapter.requests[1]?.messages ?? [])).toContain('unknown tool "web_search"')
+    expect(requestText(adapter.requests[1]?.messages ?? [])).not.toContain('run_code')
+    expect(adapter.requests[0]?.signal?.aborted).toBe(false)
+  })
+
+  it('allows native dispatch to resolve a tool registered after the request was built', async () => {
+    let executions = 0
+    const adapter = new MockAdapter([
+      () => {
+        ctx.tools.register(defineContentToolFixture({
+          name: 'late', description: 'registered during generation', parameters: {},
+          async execute() { executions += 1; return [{ type: 'text', text: 'late result' }] },
+        }))
+        return toolCallResponse('late-call', 'late', {})
+      },
+      textResponse('done'),
+    ])
+    const ctx = await harness(adapter, 'native')
+    const agent = await ctx.agentLoop.create(SessionId('native-late'), { provider: 'mock', model: 'mock' })
+    agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
+    await waitForIdle(ctx, agent)
+
+    expect(adapter.requests[0]?.tools?.some(tool => tool.name === 'late') ?? false).toBe(false)
+    expect(executions).toBe(1)
+    expect(agent.session.snapshotEvents().some(event => event.type === 'user/message' && event.data.source.kind === 'tool-routing')).toBe(false)
+    expect(requestText(adapter.requests[1]?.messages ?? [])).toContain('late result')
+  })
+
+  it('honors an agent PTC override in a native deployment', async () => {
+    const adapter = new MockAdapter([callTo('web_search', 'PTC-TAIL'), textResponse('recovered')])
+    const ctx = await harness(adapter, 'native')
+    const agent = await ctx.agentLoop.create(SessionId('scoped-ptc'), { provider: 'mock', model: 'mock' })
+    agent.ctx.tools.presentAs('ptc')
+    agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
+    await waitForIdle(ctx, agent)
+
+    expect(adapter.requests[0]?.tools?.map(tool => tool.name)).toEqual(['run_code'])
+    expect(agent.session.snapshotEvents().some(event => event.type === 'tool/call')).toBe(false)
+    expect(agent.session.snapshotEvents().some(event => event.type === 'user/message' && event.data.source.kind === 'tool-routing')).toBe(true)
+    expect(requestText(adapter.requests[1]?.messages ?? [])).toContain('only `run_code` is callable directly')
+  })
 })

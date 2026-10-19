@@ -453,13 +453,10 @@ export class ReactLoopAgent implements Agent {
         this.session.append('user/message', context, { surfaceOp: 'append' })
       }
       firstAttempt = false
-      // A tool name this request never offered can only ever be denied: the wire
-      // schema list is what the model was shown, and under ptc presentation it is
-      // exactly the transport tool, so any other name is collapsed at dispatch
-      // regardless of registration. Cut the stream at the name instead of
-      // generating, storing, rendering, and re-sending arguments that can only
-      // produce that denial. `collapses()` stays the backstop for providers that
-      // withhold the name until the arguments arrive.
+      // Only PTC makes unoffered model-direct names unconditionally unreachable.
+      // Native dispatch may resolve a tool registered after this request started;
+      // leave that path intact rather than injecting PTC-only routing advice.
+      const ptcPresentation = this.loopCtx.tools.modeFor(this) === 'ptc'
       const offeredToolNames = new Set(assembly.tools.map(tool => tool.name))
       let rejectedCall: { name: string; index: number } | undefined
       // Cancellation is per attempt, never the loop signal: a routing rejection
@@ -486,7 +483,7 @@ export class ReactLoopAgent implements Agent {
         started = true
         for await (const chunk of stream) {
           signal.throwIfAborted()
-          if (rejectedCall === undefined
+          if (ptcPresentation && rejectedCall === undefined
             && chunk.type === 'tool-call-delta'
             && chunk.name !== undefined
             && !offeredToolNames.has(chunk.name)) {

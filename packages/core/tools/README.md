@@ -90,6 +90,8 @@ The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-a
 
 A tool’s `projectContent` installs execution-prepared content before post-execute policies. Policies may still replace or block it; `finalizeContent` remains the final content transform after those policies.
 
+`ctx.tools.modeFor(agent)` returns the effective presentation after scoped overrides, not just the deployment default. Consumers that make request-specific routing decisions sample it before starting generation.
+
 ### Host presentation descriptors
 
 A tool can retain pure `presentCall()` and `presentResult()` methods for Host-local consumers. The built-in Web Client does not consume those values. It selects a renderer through `tool.call.toolview` and derives card props from raw call arguments, result content, failure state, and persisted metadata. The [Client-derived presentation decision](../../../.agents/notes/implemented/architecture/2026-08-23-client-derived-tool-presentation.md) owns this transport split.
