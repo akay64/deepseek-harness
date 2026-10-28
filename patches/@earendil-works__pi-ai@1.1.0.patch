@@ -71,3 +71,21 @@ index 7da1c45de8a106a68411cf79bec75f553534a1c7..296d131b59b1cf75f2516c39e85bba72
                  break;
              }
              case "toolcall_end":
+diff --git a/dist/api/simple-options.js b/dist/api/simple-options.js
+index 4e36f350e95fb4743014dcf3c6ab512eab988214..bfcf5fc47442dd43e2205b92551d29df71e3a53b 100644
+--- a/dist/api/simple-options.js
++++ b/dist/api/simple-options.js
+@@ -3,10 +3,9 @@ import { estimateContextTokens } from "../utils/estimate.js";
+ const CONTEXT_SAFETY_TOKENS = 4096;
+ const MIN_MAX_TOKENS = 1;
+ export function clampMaxTokensToContext(model, context, maxTokens) {
+-    if (model.contextWindow <= 0)
+-        return Math.max(MIN_MAX_TOKENS, maxTokens);
+-    const available = model.contextWindow - estimateContextTokens(context).tokens - CONTEXT_SAFETY_TOKENS;
+-    return Math.min(maxTokens, Math.max(MIN_MAX_TOKENS, available));
++    // PATCH(personal): estimator-based context clamp removed; servers decide at
++    // the window boundary with exact token counts. Re-validate on every pi-ai bump.
++    return Math.max(MIN_MAX_TOKENS, maxTokens);
+ }
+ export function resolveSamplingParams(model, thinkingLevel, requestParams) {
+     const effectiveThinkingLevel = clampThinkingLevel(model, thinkingLevel);
