@@ -279,7 +279,7 @@ describe('connection node half', () => {
     const { ctx, dispose } = await mounted()
     try {
       const rows: IndexInjection[] = []
-      ctx.emit('webserver/index-inject', rows)
+      ctx.emit('webserver/index-inject', rows, PAGE_PEER)
       expect(rows).toContainEqual({ kind: 'global', name: '__DSH_ALLOW_REMOTE_ADMIN__', value: expected })
     } finally { await dispose() }
   })
@@ -289,7 +289,7 @@ describe('connection node half', () => {
     const { ctx, dispose } = await mounted({ allowRemoteAdmin: true })
     try {
       const rows: IndexInjection[] = []
-      ctx.emit('webserver/index-inject', rows)
+      ctx.emit('webserver/index-inject', rows, PAGE_PEER)
       expect(rows).toContainEqual({ kind: 'global', name: '__DSH_ALLOW_REMOTE_ADMIN__', value: true })
     } finally { await dispose() }
   })

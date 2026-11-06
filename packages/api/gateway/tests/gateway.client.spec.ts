@@ -359,6 +359,7 @@ async function benchFiber(
     rpc,
     registerGenerationSource: generation.register,
     start,
+    canAdminister: false,
   } satisfies ConnectionHandle)
   const client = ctx.plugin({ inject, apply })
   await client
@@ -468,6 +469,7 @@ async function loaderReadinessBench(
     rpc: carrier === 'web' ? { call } : { call, open: () => unexpectedInProcessStream() },
     registerGenerationSource: generation.register,
     start,
+    canAdminister: false,
   } satisfies ConnectionHandle)
   ctx.provide('loader', { await: () => readiness })
   const client = ctx.plugin({ inject, apply })
