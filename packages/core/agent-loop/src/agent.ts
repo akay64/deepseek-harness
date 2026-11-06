@@ -499,8 +499,11 @@ export class ReactLoopAgent implements Agent {
       // Only PTC makes unoffered model-direct names unconditionally unreachable.
       // Native dispatch may resolve a tool registered after this request started;
       // leave that path intact rather than injecting PTC-only routing advice.
-      const ptcPresentation = this.loopCtx.tools.modeFor(this) === 'ptc'
       const offeredToolNames = new Set(assembly.tools.map(tool => tool.name))
+      // 0.2.2 moved presentation into the executor plugins and dropped the registry's
+      // mode accessor. Under PTC the wire schema list is exactly the transport tool,
+      // so that shape is the predicate the rest of this path relies on.
+      const ptcPresentation = offeredToolNames.size === 1 && offeredToolNames.has(RUN_CODE_NAME)
       let rejectedCall: { name: string; index: number } | undefined
       // Cancellation is per attempt, never the loop signal: a routing rejection
       // ends one request, a user cancellation ends the run. The loop signal still

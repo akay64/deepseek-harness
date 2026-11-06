@@ -12,7 +12,10 @@ import type { StreamChunk } from '@deepseek-ai/dsh-llm'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import LlmRuntime from '@deepseek-ai/dsh-llm'
-import ToolRuntime, { defineContentToolFixture } from '@deepseek-ai/dsh-tools'
+import ToolRuntime from '@deepseek-ai/dsh-tools'
+import { defineContentToolFixture } from '@deepseek-ai/dsh-tool-testkit'
+import { PtcExecutor } from '@deepseek-ai/dsh-tool-executor-ptc'
+import { NativeToolExecutor } from '@deepseek-ai/dsh-tool-executor-native'
 import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
@@ -41,8 +44,10 @@ async function harness(adapter: MockAdapter, mode: ToolPresentationMode = 'ptc')
   await ctx.plugin(SessionStore)
   await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(SystemPrompt, { personaPrefix: '' })
-  await ctx.plugin(ToolRuntime, { mode })
+  await ctx.plugin(ToolRuntime)
+  // 0.2.2 split tool execution out of the registry: one executor plugin per mode.
   await ctx.plugin(FakePtcRuntime)
+  ctx.tools.setExecutor(mode === 'native' ? new NativeToolExecutor(ctx) : new PtcExecutor(ctx))
   await ctx.plugin(AgentRegistry)
   await ctx.plugin(AgentLoop, { agents: [] })
   ctx.llm.registerAdapter(['mock'], adapter)
