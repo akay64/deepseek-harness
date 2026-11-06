@@ -37,7 +37,7 @@ import { canonicalHeader, headerEquals, ToolCallRecovery } from '@deepseek-ai/ds
 import { renderContextSections, renderPrompt } from '@deepseek-ai/dsh-system-prompt'
 import type { PromptAssembly } from '@deepseek-ai/dsh-system-prompt'
 import type {} from '@deepseek-ai/dsh-session-projection'
-import { ptcRoutingDenial, ToolActivationError, ToolBatchExecutionError } from '@deepseek-ai/dsh-tools'
+import { RUN_CODE_NAME, ToolActivationError, ToolBatchExecutionError, ToolNotFoundError } from '@deepseek-ai/dsh-tools'
 import type { ResolvedToolSet } from '@deepseek-ai/dsh-tools'
 import type { Context } from '@deepseek-ai/cordis'
 import { ReactLoopInbox } from './inbox.ts'
@@ -572,7 +572,12 @@ export class ReactLoopAgent implements Agent {
         if (this.routingRejections?.turn !== turn) this.routingRejections = { turn, names: [] }
         const ledger = this.routingRejections
         ledger.names.push(rejectedCall.name)
-        const denial = ptcRoutingDenial(rejectedCall.name)
+        // Same wording the PTC executor's dispatch rejection uses, so either path
+        // teaches one rule.
+        const denial = new ToolNotFoundError(
+          rejectedCall.name,
+          `only \`${RUN_CODE_NAME}\` is callable directly — call \`${rejectedCall.name}\` from inside a \`${RUN_CODE_NAME}\` program instead`,
+        )
         // The same text a collapsed call gets at dispatch, so either path teaches
         // one rule: reach a tool from inside the transport tool's program.
         this.session.append('user/message', createUserMessage({
